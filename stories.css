@@ -1,0 +1,42 @@
+body 	{
+	background-color: white;
+	background-image: URL(/derby/back.gif);
+	}
+
+hr 	{
+	color: #008080;
+	height: 1px;
+	}
+
+h3	{
+	font: 18pt "JaneAusten", "lucida calligraphy", "Zapf Chancery", "Lucida Handwriting", "WhisperWrite", "Brush Script MT";
+	color: #008080;
+	font-style: oblique;
+	align: center;
+	}
+
+h4	{
+	font: 16pt "JaneAusten", "lucida calligraphy", "Zapf Chancery", "Lucida Handwriting", "WhisperWrite", "Brush Script MT";
+	font-style: italic;
+	font-weight: normal;
+	color: #008080;
+	}
+
+
+b 	{
+	color: #008080;
+	font-weight: bold;
+	font-style: italic;
+	}
+
+i 	{
+	}
+
+
+a:link	{
+	link: blue;
+	}
+
+a:visited	{
+	link: #008080;
+	}
