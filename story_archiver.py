@@ -43,7 +43,7 @@ def strip_comment(post, keyword):
   post_dna = post[start: next_br + len(br_tag)]
   if post_dna:
     tempstring = post_dna
-    print ('\t removed: "{}"'.format(post_dna))
+    print('\t removed: "{}"'.format(post_dna))
     return post.replace(post_dna, ""), tempstring
   return post, ""
 
@@ -70,7 +70,7 @@ def format_new_post(msg_id, title, author, post_date, post):
 
 #TODO fix format of posting date?
 #TODO insert the long line between appended sections which is, I think <hr><p>
-    
+
     with open(ARCHIVE_TEMPLATE) as template_file:
         template = template_file.read()
 
@@ -84,6 +84,8 @@ def format_new_post(msg_id, title, author, post_date, post):
     #from dateutil.parser import parse
     #b = parse(post_date)
     #print(b.weekday())
+    # SETH NOTE: b.strftime('%A') will give you the name (e.g. 'Wednesday')
+    # SETH NOTE: b.strftime('%a') will give you abbreviated name (e.g. 'Wed')
 
     new_story = (template
         .replace("$TITLE", title)
@@ -95,9 +97,8 @@ def format_new_post(msg_id, title, author, post_date, post):
         #TODO And either remove from template or send the template a "" for that param
         #TODO do something similar to insert jumps
         .replace("$OGLINK", '<a href="{}.html">originalpost</a><br>'.format(msg_id))
-        #.replace("$COPYRIGHT_YEAR", post_date[-4:]))
         .replace("$COPYRIGHT_YEAR", post_date[:4]))
-    
+
     output_name = create_filename(author, title, post_date)
 
     with open(output_name, "w", encoding="utf-8") as output_file:
@@ -106,12 +107,13 @@ def format_new_post(msg_id, title, author, post_date, post):
     print("\t wrote {} to {}".format(
         len(new_story), output_name))
 
+
 def get_file(cached_filename, url, chained):
-    # this finds, caches, and opens a copy of a remote file 
-            
+    # this finds, caches, and opens a copy of a remote file
+
             # Check if we already downloaded & saved locally
             cache_name = CACHE_DIRECTORY + cached_filename
-            print("Get/Create this url:", url)
+            print('Get/Create this url: "{}"'.format(url))
 
             if os.path.exists(cache_name):
                 with open(cache_name, "r", encoding="utf-8") as cached:
@@ -119,11 +121,11 @@ def get_file(cached_filename, url, chained):
 
             else:
                 assert url.startswith("https:"), url
-                
+
                 #page_data = urllib.request.urlopen(url).read().decode("utf-8")
                 request = urllib.request.urlopen(url)
-                charset = request.info().get_content_charset()  
-                page_data = urllib.request.urlopen(url).read().decode(charset)
+                charset = request.info().get_content_charset("latin-1")
+                page_data = request.read().decode(charset)
                 page_data = page_data.replace(
                    '<script type="text/javascript" src="https://www.dwiggie.com/phorum/javascript.php?5"></script>',
                    '')
@@ -132,9 +134,10 @@ def get_file(cached_filename, url, chained):
                 if chained:
                     #TODO implement the dechaining
                     pass
-                print ("Downloaded")
+                print("Downloaded")
                 time.sleep(2)
             return page_data
+
 
 ########## MAIN ##############
 
@@ -166,12 +169,12 @@ with open(INPUT_CSV_PATH, encoding='utf-8') as csv_file:
     assert header[post_url_indx] == "new posting - real url"
     assert header[archive_url_indx] == "archive real url"
     assert header[final_post_indx] == "FinalPost?"
-    
+
     # While first entry of last line isn't a date
     while not ('200' in csv_input[-1][0] or '199' in csv_input[-1][0]):
         # remove the last line :)
         dropped = csv_input.pop()
-        #print ("Dropping:", ",".join(dropped))
+        #print("Dropping:", ",".join(dropped))
 
     converted = 0
     for i, line in enumerate(csv_input):
@@ -181,25 +184,25 @@ with open(INPUT_CSV_PATH, encoding='utf-8') as csv_file:
 
         action = line[comment_index]
         msg_id = line[msg_id_indx]
-        
+
         # archived entries shouldn't have a action:
         if msg_id != "":
             assert action != "", (i+2, action)
 
         if action == "":
             continue
-        
+
         post_date = line[post_date_indx]
         title = line[title_index]
-        author = line[author_index]    
-        
+        author = line[author_index]
+
         if action == "ArchiveNew":
 
             post_url = line[post_url_indx]
             page_data = get_file(msg_id+".html", str(post_url), False)
             print('ArchiveNew({}): "{}" from {}'.format(i+2, title, post_url))
             print("\t page len:", len(page_data))
-            print(page_data[0:40])
+            print("\t", page_data[0:40])
 
             # For now try the simpliest extraction possible
             # Assumes message starts with this string
@@ -214,18 +217,18 @@ with open(INPUT_CSV_PATH, encoding='utf-8') as csv_file:
            #TODO /div is a section marker. For jumps?
             message_body = page_data[post_start_index: post_end_index] + "</div>"
 
-            print ("\t", "{} characters copied, {:.1f}% of original html".format(
+            print("\t", "{} characters copied, {:.1f}% of original html".format(
                 len(message_body), 100 * len(message_body) / len(page_data)))
-            print ("\t", message_body[11:55], "...", message_body[-30:])
+            print("\t", message_body[11:55], "...", message_body[-30:])
 
             format_new_post(msg_id, title, author, post_date, message_body)
 
-            print ()
+            print()
             converted += 1
-            if converted >= 4:
+            if converted >= 10:
                 # Quit after converting a couple.
                 break
-        
+
         elif action == "ArchiveNewFant":
             # the same action occurs for this and ArchiveNew with exception of designated final directory/index.
             #TODO implement this
@@ -235,16 +238,30 @@ with open(INPUT_CSV_PATH, encoding='utf-8') as csv_file:
             post_url = line[post_url_indx]
             page_data = get_file(msg_id+".html", str(post_url), False)
             print('****** HUMAN intervention required to amend existing work:({}): "{}"  {}'.format(i+2, post_date, title))
-            print(page_data[0:40])
+            print("\t", page_data[0:40])
+
             #TODO Determine the correct associated archive file to fetch, this isn't correct csv line#
             #archive_url = line[archive_url_indx]
+            # SETH NOTE if you have the Archive Title (as I see in the spreadsheet you can do this
+            # archive_url = ""
+            # for test_line in lines:
+            #   if test_line[title_index] == line[archive_title_idx]:
+            #       archive_url = test_line[archive_real_url_idx]
+            #       break
+            #
+            # or this magic "list comprehension"
+            #
+            # archive_urls = [test_line[archive_real_url_idx] for test_line in lines
+            #   if test_line[title_index] == line[archive_title_idx]]
+            # assert len(archive_urls) == 1, archive_urls
+            # archive_url = archive_urls[0]
+
             archive_url = "https://www.dwiggie.com//derby/abbiecb.htm"
             archive_page_data = get_file("Testfile", archive_url, True)
-            print('local file to modify: {},'"Testfile")
+            print('\t local file to modify: "{}"'.format("Testfile"))
             #TODO mention filename in msg
-            
-            #TODOquit after once until we get it working.
-            break;
+
+            #TODO quit after once until we get it working.
             continue
         elif action == "no-op":
             #these are extraneous posts, get next post
@@ -275,3 +292,22 @@ with open(INPUT_CSV_PATH, encoding='utf-8') as csv_file:
 
         ##TODO Need to write out the index entry for any New and Append Action that happened.
             ## should we write the amend entry on assumption that it will happen??
+
+        # SETH NOTE I don't fully understand the TODO BUT
+        # try something like this
+        # results_csv = list(csv.reader(results_csv_file))
+        # results = {} # <- a "dictionary" with each "key" mapping to one (and only one) "value"
+        # for line in results_csv:
+        #   key = line[msg_id]
+        #   results[key] = line
+        #
+        # # Now you can write
+        # results[msg_id] = [NEW_CSV_DATA + ACTION]
+        # # And that erases the old data
+        # # Finally we save this by taking all the results e.g. the "values" in our dictionary
+        # # And saving them to a new csv
+        # with open(results_csv_file) as csv_file:
+        #   writer = csv.writer(csv_file)
+        #   for line in sorted(results.values()):
+        #       writer.writerow(line)
+
