@@ -1,0 +1,27 @@
+How does chrome know https://www.dwiggie.com/derby/old_2006/kellyvw2b.htm
+is charset=windows-1252
+can check with document.characterSet
+
+# Really messed up d6efc674433aa065bf4b4a7959c0dfe7.html
+
+
+
+#Some files start with "Html>" missing "<?"
+grep -i '^html>' *
+
+
+
+
+#call tidy on many files.
+
+wc * | tqdm | sort -n | ../wcs
+mkdir ../story_backup/
+cat ../wcs | awk '{ if ($1 == 0) print $4 }' | xargs -I{} echo 'cp {} ../story_backup/{}'
+cat ../wcs | awk '{ if ($1 == 0) print $4 }' | xargs -I{} echo 'tidy -w 0 -m {}'
+
+
+
+
+# Added <hr> to
+vim 58a667e4c65cb87b8d2fa7310e6c647f.html 6bacd5c7cced0b92fdd1a0160ee6e2a9.html c198b078b588ebcd47ecf06e0d18ff7e.html 6c085e066e91364353d127eec5231593.html a0774378fd9804c139e9113c668a3f2d.html
+
