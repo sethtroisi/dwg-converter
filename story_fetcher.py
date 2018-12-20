@@ -127,9 +127,13 @@ def fetch_all_urls_recursively():
             #print(k, "found", v, "times")
             archive_urls.remove(k)
 
-    # Make sure none of them have the same name or things will get wierd
-    urls = set(archive_urls)
+    # url => local file name
     processed = {}
+    # url => list of other urls on that page
+    out_links = {}
+
+    # current urls to explore
+    urls = set(archive_urls)
     filter_count = {name: 0 for name in FILTER_RE}
     weird = 0
 
@@ -139,11 +143,15 @@ def fetch_all_urls_recursively():
         # Make sure we haven't already processed this url
         if url in processed: continue
 
-        name = hash_url(url) + ".html"
-        processed[url] = name # Store where it was saved locally.
+        # Two broken items in CSV
+        if "geocities" in url:
+            continue
 
-        # These are just broken
-        if "geocities" in url: continue
+        name = hash_url(url) + ".html"
+
+        # Store where it was saved locally.
+        processed[url] = name
+        out_links[url] = []
 
         # Name has overlaps so we use a hash of the string to save the file as
         if len(processed) % 100 == 0:
@@ -187,13 +195,6 @@ def fetch_all_urls_recursively():
                 if new_url == "":
                     continue
 
-                # Handle these later
-                if new_url in [
-                    'http://austen.comoldc/lizm8.htm',
-                ]:
-                    continue
-
-
                 # Figure out correct pointer
                 if new_url.startswith('/'):
                     # Absolute path under dwiggie.com
@@ -209,6 +210,7 @@ def fetch_all_urls_recursively():
 
         if len(matches) > 0:
             urls.update(matches)
+            out_links[url] = sorted(matches)
 #            print("\tFound {} links: {}".format(len(matches), sorted(matches)))
 
     print()
@@ -222,7 +224,7 @@ def fetch_all_urls_recursively():
         len(processed), len(processed) - len(archive_urls)))
 
 
-    return processed
+    return processed, out_links
 
 # MOVE SOMEWHERE WHICH HAS GROUPINGS
 def dad_results(groupings, processed):
@@ -303,7 +305,7 @@ def dad_results(groupings, processed):
 ########## MAIN ##############
 
 
-processed = fetch_all_urls_recursively()
+processed, out_links = fetch_all_urls_recursively()
 
 # Find any file in the CACHE_DIR that shouldn't be there
 bad = []
@@ -312,7 +314,9 @@ for filename in os.listdir(STORY_DIRECTORY):
     if filename not in processed.values():
         bad.append(filename)
 #        os.remove(STORY_DIRECTORY + "/" + filename)
-print("\n{} bad files: {}\n".format(len(bad), bad[:10]))
+if len(bad):
+    print("\n{} bad files: {}\n".format(len(bad), bad[:10]))
+
 
 not_dl = []
 for key, filename in processed.items():
@@ -320,13 +324,17 @@ for key, filename in processed.items():
         not_dl.append((key, filename))
 for key, fn in not_dl:
     processed.pop(key)
+    out_links.pop(key)
+
 print("\n{} not downloaded files:".format(len(not_dl)))
-for n in not_dl[:10]:
-    print("\t", n)
+for key in not_dl:
+    print("\t", key)
 print()
 
 
 print("\n{} files".format(len(processed)))
+print("\twith {} outgoing links".format(
+    sum([len(links) for links in out_links.values()])))
 
 with open(STORY_JSON_PATH, "w") as story_json_file:
-    json.dump(processed, story_json_file)
+    json.dump((processed, out_links), story_json_file)

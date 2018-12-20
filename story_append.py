@@ -22,11 +22,10 @@ PRINT_COUNT = 0
 
 # This actually look very clean
 SHOW_FILTERED_CHAPTERS = False
-SHOW_BAD_CHAPTER_ORDER = True
+SHOW_BAD_CHAPTER_ORDER = False
 
-# if <author>1b.html exists but not <author>1a.html
-# assume first story is <author.html>
-PRINT_1B_NO_1A = True
+# Show any oddities with names of stories
+SHOW_STORY_NAMING_ODDITIES = True
 
 # This are harder to tell but mostly look good.
 PRINT_FOOTER_DIFFS = False
@@ -314,8 +313,10 @@ def get_story_datas(needed):
 
 
 with open(STORY_JSON_PATH, "r") as story_json_file:
-    processed = json.load(story_json_file)
+    processed, out_links = json.load(story_json_file)
 assert len(processed) > 0
+assert len(out_links) > 0
+
 
 # NOTE(SETH): toggle False to True and run once.
 story_data = "story_datas.json"
@@ -327,26 +328,33 @@ else:
     with open(story_data, 'r') as f:
         datas = json.load(f)
 
+print (processed.keys() - out_links.keys())
+print (out_links.keys() - processed.keys())
 
 
-# Try to group files into "stories"
+
 groupings = {}
 for name in processed:
     #name = name.replace('https://www.dwiggie.com/', '')
 
-    # path (e.g /old_2007/ matters)
+    # path (e.g /old_2007/) matters
     path = os.path.dirname(name)
     title = os.path.basename(name)
 
     match = re.match('([a-z]+[0-9]*)([a-z]*).htm', title)
     if not match:
-        # About 20 files like ann1_2.htm, laura8-9.htm
-        # print("Huh?", title)
+        if SHOW_STORY_NAMING_ODDITIES:
+            # About 20 files like ann1_2.htm, laura8-9.htm
+            print_weird(name)
         continue
 
     assert title.endswith('.htm'), (name, processed[name])
 
     title, part = match.groups()
+    if len(part) > 1:
+        print_weird(title)
+        assert False, (name, path, title)
+
     key = path + '/' + title
 
     if key not in groupings:
@@ -354,14 +362,18 @@ for name in processed:
 
     groupings[key].append(name)
 
+for k in groupings:
+    groupings[k].sort()
+
 
 def print_grouping_info(groups):
     page_count = Counter([len(group) for group in groups.values()])
-    print ("{} groupings:".format(len(page_count)))
+    print ("{} groupings:".format(sum(page_count.values())))
     for pages, count in sorted(page_count.items()):
         print ("\t{} pages x {} stories".format(pages, count))
 
 
+'''
 print_grouping_info(groupings)
 for i, (story, urls) in enumerate(groupings.items()):
     if i > 400:
@@ -369,21 +381,17 @@ for i, (story, urls) in enumerate(groupings.items()):
 
     url = urls[0]
     if not re.match(r'.*[1-9]a?.htm$', url):
-        # Either authors first story or ...
-        if url[-5] not in 'bc':
-            continue
-
 
         # Only seems to happen with author's first story
         assert url.endswith('1b.htm'), urls
         first_part_guess = url.replace('1b.htm', '.htm')
         assert url in processed, urls
 
-        if PRINT_1B_NO_1A:
+        if SHOW_STORY_NAMING_ODDITIES:
            print_weird(urls)
 
 print_grouping_info(groupings)
-
+'''
 
 
 '''

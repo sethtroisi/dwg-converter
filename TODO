@@ -40,6 +40,11 @@ vim bddeb8feb130aa31deba49ddb958b8b7.html
 # %s/john3.htm/john3a.htm/gc
 vim 09fa89d0f84064bdc0d400b7e3ca8bc6.html
 
+# Next link (berna7k.htm) removed from
+vim c84e11710ab375f643cb34072a731a13.html
+
+
+
 # Fix template in the middle of this story
 vim d6efc674433aa065bf4b4a7959c0dfe7.html
 
