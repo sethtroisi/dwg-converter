@@ -224,6 +224,7 @@ def fetch_all_urls_recursively():
 
     return processed
 
+# MOVE SOMEWHERE WHICH HAS GROUPINGS
 def dad_results(groupings, processed):
     def hash_name(name):
         return STORY_DIRECTORY + processed[name]
@@ -319,48 +320,13 @@ for key, filename in processed.items():
         not_dl.append((key, filename))
 for key, fn in not_dl:
     processed.pop(key)
-print("\n{} not downloaded files: {}\n".format(len(not_dl), not_dl[:10]))
+print("\n{} not downloaded files:".format(len(not_dl)))
+for n in not_dl[:10]:
+    print("\t", n)
+print()
 
 
-
-# Try to group files into "stories"
-groupings = {}
-for name in processed:
-    #name = name.replace('https://www.dwiggie.com/', '')
-
-    # path (e.g /old_2007/ matters)
-    path = os.path.dirname(name)
-    title = os.path.basename(name)
-
-    match = re.match('([a-z]+[0-9]*)([a-z]*).htm', title)
-    if not match:
-        # About 20 files like ann1_2.htm, laura8-9.htm
-        # print("Huh?", title)
-        continue
-
-    assert title.endswith('.htm'), (name, processed[name])
-
-    title, part = match.groups()
-    key = path + '/' + title
-
-    if key not in groupings:
-        groupings[key] = []
-
-    groupings[key].append(name)
-
-
-# Sort the stories hopefully to lexigraphic order
-for k in groupings:
-    groupings[k].sort()
-print("\n{} files => {} stories\n".format(len(processed), len(groupings)))
-
-
-#dad_results(groupings, processed)
-
-
-data = {'names': processed, 'stories': groupings}
+print("\n{} files".format(len(processed)))
 
 with open(STORY_JSON_PATH, "w") as story_json_file:
-    json.dump(data, story_json_file)
-
-
+    json.dump(processed, story_json_file)

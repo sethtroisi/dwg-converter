@@ -17,7 +17,29 @@ STORY_JSON_PATH="dwg_stories-2018_12_15.json"
 STORY_DIRECTORY = "stories/"
 
 MAX_FOOTER = 500
+PRINT_COUNT = 0
+
+
+# This actually look very clean
+SHOW_FILTERED_CHAPTERS = False
+SHOW_BAD_CHAPTER_ORDER = True
+
+# if <author>1b.html exists but not <author>1a.html
+# assume first story is <author.html>
+PRINT_1B_NO_1A = True
+
+# This are harder to tell but mostly look good.
 PRINT_FOOTER_DIFFS = False
+
+
+
+def print_weird(*objects, **kwargs):
+    global PRINT_COUNT
+    PRINT_COUNT += 1
+    print("(", PRINT_COUNT, ") ", sep="", end="")
+    print(*objects, **kwargs)
+    print()
+
 
 assert os.path.exists(STORY_DIRECTORY)
 
@@ -92,8 +114,91 @@ def find_footer(fn, data):
     return footer1, footer2
 
 
+def parse_number(number):
+    roman_text = re.match(r'^([ivxlc]+)\b', number)
+    if roman_text:
+        return roman.fromRoman(roman_text.group(1).upper())
+
+    # '5 - asdf', '12(ii)', '70b'
+    num = re.match(r'^([1-9][0-9]*)[abcd]?\b', number)
+    if num:
+        return int(num.group(1))
+
+    try:
+        return w2n.word_to_num(number)
+    except:
+        return None
+
+# Take text and try to extract a chapter number from it.
+def chapter_number(chapter):
+    chapter = chapter.lower()
+    chapter = re.sub(r'[:~,.()\n]', ' ', chapter)
+
+    # Change some wierd wording titling choices
+    chapter = re.sub('chapters', 'chapter', chapter)
+    chapter = re.sub('chapter the', 'chapter', chapter)
+    chapter = re.sub('^.*?chapter', '', chapter)
+
+    # Drop most punctionation
+    chapter = chapter.strip()
+
+    if chapter == "":
+        return None, chapter
+
+    number = parse_number(chapter)
+    return number, chapter
+
+
+# Check if looks like a chapter on the HTML side.
+def good_chapter(chapter):
+    # Filter empty chapters
+    if re.match('^\s*chapter\s*$', chapter, re.I):
+        return False
+
+    # If nothing else it's probably not a fake reference or in text
+    if re.match('^\s*chapter [1-9][0-9]*\s*$', chapter, re.I):
+        return True
+
+    allowed_tags = ['h1', 'h2', 'b', 'font', 'title', 'big', 'center']
+    if chapter.parent.name not in allowed_tags:
+        # Check if we are <i> inside <center> or something
+
+        node = chapter.parent
+        while len(node.contents) <= 2:
+            if node.name in allowed_tags:
+                break
+            node = node.parent
+        else:
+            return False
+
+    if len(chapter) >= 100:
+        return False
+
+    return True
+
+
+def filter_chapters(fn, chapters):
+    # TODO filter centers not parts of a short text or
+    # font, title, span, h1-4, b
+    for chapter in chapters:
+        # Check if HTML looks like a chapter (tags and stuff)
+        if not good_chapter(chapter):
+            if SHOW_FILTERED_CHAPTERS:
+                print_weird('Filtered HTML Chapter {}: "{}"'.format(
+                    fn, str(chapter.parent)[:100]).replace('\n', ''))
+            continue
+
+        text = chapter.string
+        number, processed = chapter_number(text)
+        if number is None and SHOW_BAD_CHAPTER_ORDER:
+            print_weird('Failed "{}" => "{}"'.format(text, processed))
+            continue
+        yield number
+
+
 def extract(fn):
     return extract_story(fn, get_file(fn))
+
 
 def extract_story(fn, data):
     # grab story and author from center tags.
@@ -132,6 +237,7 @@ def extract_story(fn, data):
     hrs = soup.find_all('hr')
 
     chapters = soup.find_all(string=re.compile('chapter', re.I))
+    chapters = list(filter_chapters(fn, chapters))
     posted_ons = soup.find_all(string=re.compile('posted on', re.I))
 
     len_footers = [len(footer) for footer in footers]
@@ -143,7 +249,7 @@ def extract_story(fn, data):
         "",
         get_texts(titles),
         get_texts(centers),
-        get_ns_texts(chapters),
+        chapters,
         get_ns_texts(posted_ons),
         len_footers,
     )
@@ -161,12 +267,12 @@ def get_story_datas(needed):
     with mp.Pool(3) as pool:
         sorted_processed = sorted(needed.items())
 
-        #for i, (url, fn) in sorted_processed:
-        #    data = extract(fn, get_file(fn))
+        #for i, (url, fn) in enumerate(sorted_processed):
+        #    data = extract(fn)
 
         datas = pool.imap(extract, map(lambda e: e[1], sorted_processed))
-
         for i, ((url, fn), data) in enumerate(zip(tqdm(sorted_processed), datas)):
+
         #    if i > 100:
         #        break
 
@@ -201,46 +307,6 @@ def get_story_datas(needed):
 
     return story_data
 
-def parse_number(number):
-    roman_text = re.match(r'^([ivxlc]+)\b', number)
-    if roman_text:
-        return roman.fromRoman(roman_text.group(1).upper())
-
-    # '5 - asdf', '12(ii)', '70b'
-    num = re.match(r'^([1-9][0-9]*)[abcd]?\b', number)
-    if num:
-        return int(num.group(1))
-
-    try:
-        return w2n.word_to_num(number)
-    except:
-        return None
-
-def parse_chapters(chapters):
-    parsed = []
-    for chapter in chapters:
-        og_chapter = chapter
-        chapter = chapter.lower()
-        chapter = chapter.replace('\n', '')
-        chapter = re.sub('^.*?chapter', '', chapter)
-
-        # Drop most punctionation
-        chapter = re.sub(r'[:~,.()]', ' ', chapter)
-        chapter = chapter.strip()
-
-        if chapter == "":
-            continue
-
-        number = parse_number(chapter)
-        if number is None:
-            # NOTE(seth): remaining bad chapters appear to mostly be from use of chapter in the text.
-            # print('Failed "{}" => "{}"'.format(og_chapter, chapter))
-            continue
-
-        parsed.append(number)
-
-    return parsed
-
 
 
 
@@ -248,32 +314,83 @@ def parse_chapters(chapters):
 
 
 with open(STORY_JSON_PATH, "r") as story_json_file:
-    data = json.load(story_json_file)
-
-processed = data.pop('names')
-groupings = data.pop('stories')
-assert len(data) == 0
-
-needed = {}
-for story, urls in groupings.items():
-    if len(urls) > 1:
-        for url in urls:
-            needed[url] = processed[url]
+    processed = json.load(story_json_file)
+assert len(processed) > 0
 
 # NOTE(SETH): toggle False to True and run once.
 story_data = "story_datas.json"
 if False:
-    datas = get_story_datas(needed)
+    datas = get_story_datas(processed)
     with open(story_data, 'w') as f:
         json.dump(datas, f)
 else:
     with open(story_data, 'r') as f:
         datas = json.load(f)
 
+
+
+# Try to group files into "stories"
+groupings = {}
+for name in processed:
+    #name = name.replace('https://www.dwiggie.com/', '')
+
+    # path (e.g /old_2007/ matters)
+    path = os.path.dirname(name)
+    title = os.path.basename(name)
+
+    match = re.match('([a-z]+[0-9]*)([a-z]*).htm', title)
+    if not match:
+        # About 20 files like ann1_2.htm, laura8-9.htm
+        # print("Huh?", title)
+        continue
+
+    assert title.endswith('.htm'), (name, processed[name])
+
+    title, part = match.groups()
+    key = path + '/' + title
+
+    if key not in groupings:
+        groupings[key] = []
+
+    groupings[key].append(name)
+
+
+def print_grouping_info(groups):
+    page_count = Counter([len(group) for group in groups.values()])
+    print ("{} groupings:".format(len(page_count)))
+    for pages, count in sorted(page_count.items()):
+        print ("\t{} pages x {} stories".format(pages, count))
+
+
+print_grouping_info(groupings)
+for i, (story, urls) in enumerate(groupings.items()):
+    if i > 400:
+        break
+
+    url = urls[0]
+    if not re.match(r'.*[1-9]a?.htm$', url):
+        # Either authors first story or ...
+        if url[-5] not in 'bc':
+            continue
+
+
+        # Only seems to happen with author's first story
+        assert url.endswith('1b.htm'), urls
+        first_part_guess = url.replace('1b.htm', '.htm')
+        assert url in processed, urls
+
+        if PRINT_1B_NO_1A:
+           print_weird(urls)
+
+print_grouping_info(groupings)
+
+
+
+'''
 multi_part = 0
 has_chapters = 0
 has_incrementing_chapters = 0
-bad_chapters = 0
+count_chapters = 0
 for story, urls in groupings.items():
     if len(urls) == 1:
         continue
@@ -291,29 +408,27 @@ for story, urls in groupings.items():
 #    print(story)
 #    print("\t", urls)
 #    print("\t", fns)
-    had_bad_chapters = 0
+    story_chapters = []
     all_chapters = []
     for data in story_datas:
         if len(data) == 1:
             break
 
-#        print("\t", data)
-
         _, titles, centers, chapters, posted_ons, _ = data
-        parsed_chaps = parse_chapters(chapters)
-#        print (parsed_chaps)
-        all_chapters.extend(parsed_chaps)
 
-        if len(parsed_chaps) != len(chapters):
-            had_bad_chapters += 1
+        story_chapters.append(chapters)
+        all_chapters.extend(chapters)
 
-    has_chapters += len(all_chapters) > 0
-    has_incrementing_chapters += had_bad_chapters == 0 and \
-        all_chapters == sorted(all_chapters)
-    bad_chapters += had_bad_chapters > 0
+    has_chapters += len(all_chapters)
+    chapters_consistent = len(all_chapters) and all_chapters == sorted(all_chapters)
+    has_incrementing_chapters += chapters_consistent
+    count_chapters += len(all_chapters)
 
-    print()
+    if not chapters_consistent and SHOW_BAD_CHAPTER_ORDER:
+        print("\t", fns)
+        print_weird(story_chapters)
+        print()
 
-
-print ("{} multi-part-stories, {} with chapters, {} with good chapter order, {} with bad chapters"
-    .format(multi_part, has_chapters, has_incrementing_chapters, bad_chapters))
+print ("{} multi-part-stories, {} with chapters, {} with good chapter order, {} total chapters"
+    .format(multi_part, has_chapters, has_incrementing_chapters, count_chapters))
+'''

@@ -2,7 +2,46 @@ How does chrome know https://www.dwiggie.com/derby/old_2006/kellyvw2b.htm
 is charset=windows-1252
 can check with document.characterSet
 
-# Really messed up d6efc674433aa065bf4b4a7959c0dfe7.html
+
+# Count Chapters and stuff
+grepri -l 'Chapter \(the \)*\([1-9IVXL]\|One\|Two\|Three\|Four\|Five\|Six\|Seven\|Eight\|Nine\|Ten\|Eleven\|Twelve\|Thirteen\|Twenty\|Thirty\|Forty\|Fifty\)' | wc
+
+
+# Fix Chapter <i> <b> </i> </b> in
+vim a93af02e442be7207231d694223cf1e5.html
+vim 2eba54c6a20705c6ea68184fc48c0f35.html
+
+# Chapter => Chapter 32 in
+vim 03941272e3495eb7d67cc461d43475b0.html
+
+# Posted on Chapter 3 => Chapter 3 in
+vim 2da20bc99c3e732cd74d4fb3fb3adb65.html
+
+# Chapter 17 in
+vim 46debf195e59f88f9d69be7eab0fe2d5.html
+
+
+
+# %s/meghank/megank/gc
+vim 934c8c120ad44e220ed30c39bdd5b103.html cd670c51e5450bd57a17a2e93c2dfda5.html
+
+# %s/gabay2b/gabya2b/gc
+vim a30ffddcabce1ce22418feecd70189fa.html
+
+# %s/kristinb/kristin1b/gc
+vim 186f58bd80e3166213b5a791fa81ad36.html
+
+# %s/kathy5f"/kathy5f.htm"/gc
+vim d596a1a6b0c2d40f838035b5080ec146.html
+
+# %s/"erin2b/"erinh2b/gc
+vim bddeb8feb130aa31deba49ddb958b8b7.html
+
+# %s/john3.htm/john3a.htm/gc
+vim 09fa89d0f84064bdc0d400b7e3ca8bc6.html
+
+# Fix template in the middle of this story
+vim d6efc674433aa065bf4b4a7959c0dfe7.html
 
 
 
