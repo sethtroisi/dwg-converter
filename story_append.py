@@ -5,7 +5,7 @@ import os
 import re
 
 import multiprocessing as mp
-from collections import Counter
+from collections import Counter, defaultdict
 
 import roman
 from bs4 import BeautifulSoup
@@ -328,42 +328,51 @@ else:
     with open(story_data, 'r') as f:
         datas = json.load(f)
 
-print (processed.keys() - out_links.keys())
-print (out_links.keys() - processed.keys())
 
-
+# Recursively build the list of urls reachable by clicking links
+# NOTE: because of "beginning" links the group is the same no matter
+# what story you start with in the group.
 
 groupings = {}
-for name in processed:
-    #name = name.replace('https://www.dwiggie.com/', '')
-
-    # path (e.g /old_2007/) matters
-    path = os.path.dirname(name)
-    title = os.path.basename(name)
-
-    match = re.match('([a-z]+[0-9]*)([a-z]*).htm', title)
-    if not match:
-        if SHOW_STORY_NAMING_ODDITIES:
-            # About 20 files like ann1_2.htm, laura8-9.htm
-            print_weird(name)
+seen = set()
+for url in processed:
+    if url in seen:
+        # part of some existing group
         continue
 
-    assert title.endswith('.htm'), (name, processed[name])
+    open_links = set(out_links[url])
+    group = set([url])
 
-    title, part = match.groups()
-    if len(part) > 1:
-        print_weird(title)
-        assert False, (name, path, title)
+    while len(open_links):
+        other = open_links.pop()
 
-    key = path + '/' + title
+        if other in group: continue
+        group.add(other)
 
-    if key not in groupings:
-        groupings[key] = []
+        if other in out_links:
+            open_links.update(out_links[other])
+        else:
+            print("Not processed?:", other)
 
-    groupings[key].append(name)
+    # need some "canonical" url
+    leader = min(group)
 
-for k in groupings:
-    groupings[k].sort()
+    # sort 1aa after 1z
+    group = sorted(group, key=lambda e: (len(e), e))
+
+    groupings[leader] = group
+    seen.update(group)
+
+    if len(group) > 1 and SHOW_STORY_NAMING_ODDITIES:
+        prefix = os.path.commonprefix(group)
+        suffix = [g[len(prefix):].replace('.htm', '') for g in group]
+
+        # Known wierd case of <author> folled by <author>1b
+        test = [""] + ['1' + chr(98 + i) for i in range(len(group) - 1)]
+        known_issue = test == suffix
+
+        if not known_issue and (suffix[0] != "" or any(len(u) > 1 for u in suffix)):
+            print_weird(prefix + suffix[0] + ".htm", suffix)
 
 
 def print_grouping_info(groups):
@@ -373,26 +382,7 @@ def print_grouping_info(groups):
         print ("\t{} pages x {} stories".format(pages, count))
 
 
-'''
 print_grouping_info(groupings)
-for i, (story, urls) in enumerate(groupings.items()):
-    if i > 400:
-        break
-
-    url = urls[0]
-    if not re.match(r'.*[1-9]a?.htm$', url):
-
-        # Only seems to happen with author's first story
-        assert url.endswith('1b.htm'), urls
-        first_part_guess = url.replace('1b.htm', '.htm')
-        assert url in processed, urls
-
-        if SHOW_STORY_NAMING_ODDITIES:
-           print_weird(urls)
-
-print_grouping_info(groupings)
-'''
-
 
 '''
 multi_part = 0
