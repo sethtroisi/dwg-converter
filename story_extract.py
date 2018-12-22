@@ -16,6 +16,7 @@ from word2number import w2n
 STORY_JSON_PATH="dwg_stories-2018_12_15.json"
 STORY_DIRECTORY = "stories/"
 
+MAX_HEADER = 500
 MAX_FOOTER = 500
 PRINT_COUNT = 0
 
@@ -25,7 +26,7 @@ SHOW_FILTERED_CHAPTERS = False
 SHOW_BAD_CHAPTER_ORDER = False
 
 # Show any oddities with names of stories
-SHOW_STORY_NAMING_ODDITIES = True
+SHOW_STORY_NAMING_ODDITIES = False
 
 # This are harder to tell but mostly look good.
 PRINT_FOOTER_DIFFS = False
@@ -56,10 +57,21 @@ def get_file(cached_filename):
     print('FILES SHOULD ALREADY BE DOWNLOADED')
     assert False
 
-disagree = 0
-def find_footer(fn, data):
-    global disagree
 
+def find_body(fn, soup):
+    # <Html>
+    # <head><title>A Blind Date</title><link rel=stylesheet type="text/css" href="/style/stories.css"></head>
+    # <body bgcolor="#ffffff" vlink="#336666" background="back.gif">
+    # <ul>
+    # <center><h3><font size=+1 color="#336666">A Blind Date ~ Section V</font></h3></center>
+    # <center><h3><font size=+1 color="#336666">By Meghan</font></h3></center>
+
+    for child in soup.recursiveChildGenerator():
+        if len(getattr(child, "contents", [])) > 10:
+            return len(child.contents), len(str(child))
+
+
+def find_footer(fn, data):
     # Good optimization
     data = data[-MAX_FOOTER:]
 
@@ -94,10 +106,8 @@ def find_footer(fn, data):
     footer2 = footer2.strip()
 
     if PRINT_FOOTER_DIFFS and footer1 != footer2:
-        disagree += 1
-        print()
-        print(fn)
-        print(disagree, 40 * "-")
+        print_weird(fn)
+        print(80 * "-")
         if footer1 == "":
             print("No footer1:")
             print(footer2)
@@ -189,8 +199,9 @@ def filter_chapters(fn, chapters):
 
         text = chapter.string
         number, processed = chapter_number(text)
-        if number is None and SHOW_BAD_CHAPTER_ORDER:
-            print_weird('Failed "{}" => "{}"'.format(text, processed))
+        if number is None:
+            if SHOW_BAD_CHAPTER_ORDER:
+                print_weird('Failed "{}" => "{}"'.format(text, processed))
             continue
         yield number
 
@@ -220,20 +231,19 @@ def extract_story(fn, data):
     def get_ns_texts(nodes):
         return [node.string.strip() for node in nodes]
 
-    try:
-        footers = find_footer(fn, data)
-    except:
-        print()
-        print(fn)
-        raise
-
     soup = BeautifulSoup(data, "lxml")
+
+    # Append is now as simple as add new metadata at point
+    # Add to jump list
+    # Append body to other body.
+    body = find_body(fn, soup)
+
+    footers = find_footer(fn, data)
+
 
     titles = soup.find_all('title')
     assert len(titles) <= 1, titles
     centers = soup.find_all('center')
-
-    hrs = soup.find_all('hr')
 
     chapters = soup.find_all(string=re.compile('chapter', re.I))
     chapters = list(filter_chapters(fn, chapters))
@@ -244,8 +254,7 @@ def extract_story(fn, data):
 
 
     return (
-#        data,
-        "",
+        body,
         get_texts(titles),
         get_texts(centers),
         chapters,
@@ -271,17 +280,17 @@ def get_story_datas(needed):
 
         datas = pool.imap(extract, map(lambda e: e[1], sorted_processed))
         for i, ((url, fn), data) in enumerate(zip(tqdm(sorted_processed), datas)):
+            if i > 100:
+                break
 
-        #    if i > 100:
-        #        break
 
             story_data[url] = data
             name = os.path.basename(url)
 
-        #    print (url, "\t", name)
-        #    print ("file://" + os.path.abspath(os.path.join(STORY_DIRECTORY, fn)))
-        #    print (",\n".join(map(str, data)))
-        #    print ("\n")
+            print (url, "\t", name)
+            print ("file://" + os.path.abspath(os.path.join(STORY_DIRECTORY, fn)))
+            print (",\n".join(map(str, data)))
+            print ("\n")
             if len(data) == 1:
                 skipped += 1
                 continue
@@ -292,8 +301,8 @@ def get_story_datas(needed):
             has_chapters += len(chapters) > 0
             has_posted_on += len(posted_ons) > 0
             if len(titles) > 0 and len(centers) > 0:
-                center_match_title += titles[0].lower() == centers[0].lower()
-                #center_match_title += centers[0].lower().startswith(titles[0].lower())
+                #center_match_title += titles[0].lower() == centers[0].lower()
+                center_match_title += centers[0].lower().startswith(titles[0].lower())
 
     print("{} files => {} stories".format(len(processed), len(groupings)))
     print()
@@ -316,17 +325,6 @@ with open(STORY_JSON_PATH, "r") as story_json_file:
     processed, out_links = json.load(story_json_file)
 assert len(processed) > 0
 assert len(out_links) > 0
-
-
-# NOTE(SETH): toggle False to True and run once.
-story_data = "story_datas.json"
-if False:
-    datas = get_story_datas(processed)
-    with open(story_data, 'w') as f:
-        json.dump(datas, f)
-else:
-    with open(story_data, 'r') as f:
-        datas = json.load(f)
 
 
 # Recursively build the list of urls reachable by clicking links
@@ -383,9 +381,22 @@ def print_grouping_info(groups):
 
 
 print_grouping_info(groupings)
+print()
 
-'''
-multi_part = 0
+
+# NOTE(SETH): set True and run once.
+story_data = "story_datas.json"
+if True:
+    datas = get_story_datas(processed)
+    with open(story_data, 'w') as f:
+        json.dump(datas, f)
+else:
+    with open(story_data, 'r') as f:
+        datas = json.load(f)
+
+
+multi_page = 0
+pages = 0
 has_chapters = 0
 has_incrementing_chapters = 0
 count_chapters = 0
@@ -393,10 +404,7 @@ for story, urls in groupings.items():
     if len(urls) == 1:
         continue
 
-    multi_part += 1
-
-    # FOUND A PROBLEM
-    # NOTE(SETH): rebekah1b.htm and rebekah1c.htm but part a is rebekah.htm
+    multi_page += 1
 
     fns = [processed[url] for url in urls]
     story_datas = [datas[url] for url in urls]
@@ -408,18 +416,24 @@ for story, urls in groupings.items():
 #    print("\t", fns)
     story_chapters = []
     all_chapters = []
+    chapters_consistent = True
     for data in story_datas:
         if len(data) == 1:
             break
 
+        pages += 1
+
         _, titles, centers, chapters, posted_ons, _ = data
 
+        has_chapters += len(chapters) > 0
         story_chapters.append(chapters)
         all_chapters.extend(chapters)
 
-    has_chapters += len(all_chapters)
-    chapters_consistent = len(all_chapters) and all_chapters == sorted(all_chapters)
-    has_incrementing_chapters += chapters_consistent
+        if len(chapters) == 0:
+            chapters_consistent = False
+
+    chapters_are_sorted = len(all_chapters) and all_chapters == sorted(all_chapters)
+    has_incrementing_chapters += chapters_consistent and chapters_are_sorted
     count_chapters += len(all_chapters)
 
     if not chapters_consistent and SHOW_BAD_CHAPTER_ORDER:
@@ -427,6 +441,5 @@ for story, urls in groupings.items():
         print_weird(story_chapters)
         print()
 
-print ("{} multi-part-stories, {} with chapters, {} with good chapter order, {} total chapters"
-    .format(multi_part, has_chapters, has_incrementing_chapters, count_chapters))
-'''
+print ("{} multi-page-stories, {} pages, {} with chapters, {} with good chapter order, {} total chapters"
+    .format(multi_page, pages, has_chapters, has_incrementing_chapters, count_chapters))

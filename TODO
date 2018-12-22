@@ -2,6 +2,8 @@ How does chrome know https://www.dwiggie.com/derby/old_2006/kellyvw2b.htm
 is charset=windows-1252
 can check with document.characterSet
 
+# grepri -hn mailto | cut -f1 -d: | sort | uniq -c | sort -nr
+
 
 # Count Chapters and stuff
 grepri -l 'Chapter \(the \)*\([1-9IVXL]\|One\|Two\|Three\|Four\|Five\|Six\|Seven\|Eight\|Nine\|Ten\|Eleven\|Twelve\|Thirteen\|Twenty\|Thirty\|Forty\|Fifty\)' | wc
