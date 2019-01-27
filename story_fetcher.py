@@ -14,10 +14,10 @@ import utils
 ###### CONFIG VARIABLE ######
 
 
-SHOW_EXTERNAL_LINKS = True
+SHOW_EXTERNAL_LINKS = False
 
-INPUT_CSV_PATH = "dwg-posts-2019-01-26.csv"
-STORY_JSON_PATH= "dwg_stories-2018_12_15.json"
+INPUT_CSV_PATH = 'dwg-posts-2019-01-26.csv'
+STORY_JSON_PATH= 'dwg_stories-2018_12_15.json'
 
 
 LINK_RE = re.compile(r'<a href="([^"]*)"')
@@ -43,6 +43,10 @@ FILTER_RE = [
     'wikipedia.org',
 ]
 
+DERBY_DIRS = [
+    '/derby/',
+    '/ani/',
+]
 
 
 #Input CSV file should have the following columns with names specified in main below:
@@ -59,27 +63,27 @@ def get_csv_archive_urls():
         csv_reader = csv.reader(csv_file)
         csv_input = list(csv_reader)
 
-        print("Fetching Dwiggie posts from: ", INPUT_CSV_PATH);
-        print("Number of rows: {}, number of columns: {}".format(
+        print('Fetching Dwiggie posts from: ', INPUT_CSV_PATH);
+        print('Number of rows: {}, number of columns: {}'.format(
             len(csv_input), len(csv_input[0])))
         print()
 
         header = csv_input.pop(0)
 
         # verify important column assumptions
-        assert header[archive_url_indx] == "archive real url"
+        assert header[archive_url_indx] == 'archive real url'
 
         # While first entry of last line isn't a date
         while not re.match(r'^(20[01][0-9]|19[89][0-9])',  csv_input[-1][0]):
             # remove the last line :)
             dropped = csv_input.pop()
-        #    print("Dropping:", ",".join(dropped))
-        #print("Not Dropping:", ",".join(csv_input[-1]))
+        #    print('Dropping:', ','.join(dropped))
+        #print('Not Dropping:', ','.join(csv_input[-1]))
 
         found = 0
         for i, line in enumerate(csv_input):
             archive_url = line[archive_url_indx]
-            if archive_url != "":
+            if archive_url != '':
                 yield archive_url
 
 
@@ -90,7 +94,7 @@ def fetch_all_urls_recursively():
     url_counts = Counter(archive_urls)
     for k, v in url_counts.most_common():
         if v > 1:
-            #print(k, "found", v, "times")
+            #print(k, 'found', v, 'times')
             archive_urls.remove(k)
 
     # url => local file name
@@ -110,25 +114,28 @@ def fetch_all_urls_recursively():
         if url in processed: continue
 
         # Two broken items in CSV
-        if "geocities" in url:
+        if 'geocities' in url:
             continue
 
         # Name has overlaps if different directories
         # so we use a hash of the string to save the file
-        name = utils.hash_url(url) + ".html"
+        name = utils.hash_url(url) + '.html'
 
         # Store where it was saved locally.
         processed[url] = name
         out_links[url] = []
 
         if len(processed) % 500 == 0:
-            print("{}/{}, {} => {}".format(
+            print('{}/{}, {} => {}'.format(
                 len(processed), len(urls) + len(processed), url, name))
 
         try:
-            page_data = utils.get_file(name, url)
+            # Use this if you don't want to retry downloads
+            skip_download = False
+            page_data = utils.get_file(name, None if skip_download else url)
         except Exception as e:
-            print ('Got error with "{}" skipping: {}'.format(url, e))
+            print('Got error with "{}" skipping: {}'.format(url, e))
+            print()
             continue
 
         raw_matches = re.findall(LINK_RE, page_data)
@@ -144,21 +151,20 @@ def fetch_all_urls_recursively():
             else:
                 # This clause happens if new_url wasn't filtered
                 new_url = (new_url
-                    .replace('http://www.dwiggie.com/derby', '')
-                    .replace('http://thedwg.com/derby', '')
-                    .replace('/derby', '')
+                    .replace('http://www.dwiggie.com', '')
+                    .replace('http://thedwg.com', '')
                 )
-                if new_url == "":
+                if new_url == '':
                     continue
 
                 # We print this for now
-                if any(sym in new_url for sym in ['://', '/', "#"]):
-                    if not any(new_url.startswith(sym) for sym in ['old', 'ani/stories/']):
+                if any(sym in new_url for sym in ['://', '/', '#']):
+                    if not any(new_url.startswith(sym) for sym in DERBY_DIRS):
                         weird += 1
 
                         # NOTE(SETH): About 200 Urls most are to external sites
                         # Maybe 40 are for other dwiggie links ignoring those for now.
-                        if SHOW_EXTERNAL_LINKS and '#' in new_url and '://' not in new_url:
+                        if SHOW_EXTERNAL_LINKS:
                             print('Found wierd({}) looking url: "{}"'.format(
                                 weird, new_url))
                         continue
@@ -166,11 +172,11 @@ def fetch_all_urls_recursively():
                 # Figure out correct pointer
                 if new_url.startswith('/'):
                     # Absolute path under dwiggie.com
-                    new_url = "http://www.dwiggie.com/derby" + new_url
-                    print ("Absolute Path:", new_url)
+                    new_url = 'https://www.dwiggie.com' + new_url
+                    #print ('Absolute Path:', new_url)
                 else:
                     # Relative path in same directory
-                    new_url = os.path.dirname(url) + "/" + new_url
+                    new_url = os.path.dirname(url) + '/' + new_url
 
                 assert '//' not in new_url[7:], new_url
                 matches.add(new_url)
@@ -178,13 +184,13 @@ def fetch_all_urls_recursively():
         if len(matches) > 0:
             urls.update(matches)
             out_links[url] = sorted(matches)
-            #print("\tFound {} links: {}".format(len(matches), sorted(matches)))
+            #print('\tFound {} links: {}'.format(len(matches), sorted(matches)))
 
-    print("\nFiltered Links:")
+    print('\nFiltered Links:')
     for k, v in sorted(filter_count.items(), key=lambda l: -l[1]):
-        print("\t{}: {}".format(k, v))
+        print('\t{}: {}'.format(k, v))
 
-    print("\n\nFound {} files ({} not in CSV)".format(
+    print('\n\nFound {} files ({} not in CSV)'.format(
         len(processed), len(processed) - len(archive_urls)))
     return processed, out_links
 
@@ -200,9 +206,9 @@ for filename in os.listdir(utils.STORY_DIRECTORY):
     # See if any current post points to this file.
     if filename not in processed.values():
         bad.append(filename)
-#        os.remove(utils.STORY_DIRECTORY + "/" + filename)
+#        os.remove(utils.STORY_DIRECTORY + '/' + filename)
 if len(bad):
-    print("\n{} bad files: {}\n".format(len(bad), bad[:10]))
+    print('\n{} bad files: {}\n'.format(len(bad), bad[:10]))
 
 
 not_dl = []
@@ -212,15 +218,15 @@ for key, filename in processed.items():
 for key, fn in not_dl:
     processed.pop(key)
     out_links.pop(key)
-print("\n{} not downloaded files:".format(len(not_dl)))
+print('\n{} not downloaded files:'.format(len(not_dl)))
 for key in not_dl:
-    print("\t", key)
+    print('\t', key)
 
 
-print("\n\n{} files".format(len(processed)))
-print("\twith {} outgoing links".format(
+print('\n\n{} files'.format(len(processed)))
+print('\twith {} outgoing links'.format(
     sum([len(links) for links in out_links.values()])))
 
 # Save this data to a file for use in story_extract.py
-with open(STORY_JSON_PATH, "w") as story_json_file:
+with open(STORY_JSON_PATH, 'w') as story_json_file:
     json.dump((processed, out_links), story_json_file)

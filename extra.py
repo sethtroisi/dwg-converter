@@ -48,4 +48,71 @@ def dad_results(groupings, processed):
             <th>Darcy's/1000 words</th>
             <th>Liz's/1000 words</th>
             <th>Length</th>
+            <th>link(s)</th>
+        </tr>
+    '''.format(len(scores)))
+
+        for s, d,l,w, fns in scores[:50]:
+
+            columns = [
+                "{:.2f}".format(s),
+                int(d**2),
+                int(l**2),
+                int(w**(1 / 0.6) * 1000),
+                ",".join(link_for_name(fn) for fn in fns),
+            ]
+
+            row = "<tr>{}</tr>"
+            values = "  <td>{}</td>"
+            results.write(row.format("\n".join([values.format(v) for v in columns])))
+
+        results.write('''
+    </table>
+    </body>
+    </html>''')
+
+
+
+'''
+groupings_b = {}
+for name in processed:
+    #name = name.replace('https://www.dwiggie.com/', '')
+
+    # path (e.g /old_2007/) matters
+    path = os.path.dirname(name)
+    title = os.path.basename(name)
+
+    match = re.match('([a-z]+[0-9]*)([a-z]*).htm', title)
+    if not match:
+        # About 20 files like ann1_2.htm, laura8-9.htm
+        print_weird(name)
+        continue
+
+    assert title.endswith('.htm'), (name, processed[name])
+    title, part = match.groups()
+    if len(part) > 1:
+        print_weird(title)
+        continue
+
+    key = path + '/' + title + '.htm'
+    if key not in groupings_b:
+        groupings_b[key] = []
+    groupings_b[key].append(name)
+
+for k in groupings_b:
+    groupings_b[k].sort()
+
+print_grouping_info(groupings_b)
+print()
+
+def shorten(l):
+    return [a.replace(DWIGGIE_PREFIX, "DWG/") for a in l]
+
+for k in sorted(set(groupings.keys()) | set(groupings_b.keys())):
+    a = groupings.get(k, [])
+    b = groupings_b.get(k, [])
+    if a != b:
+        print_weird("Mismatch ({:30}):".format(k), shorten(a), shorten(b))
+'''
+
 

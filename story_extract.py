@@ -4,6 +4,7 @@ import json
 import os
 import re
 import sys
+sys.setrecusionlimit = 10000
 
 import multiprocessing as mp
 from collections import Counter, defaultdict
@@ -68,8 +69,8 @@ def find_body(fn, soup):
                 node = child
                 size_children = test_size
 
-    assert node is not None, fn
-
+    if not node:
+        return None
     return len(node.contents), len(str(node))
 
 
@@ -209,6 +210,7 @@ def filter_chapters(fn, chapters):
 
 
 def extract(fn):
+    print ("Hi", fn)
     return extract_story(fn, utils.get_file(fn))
 
 
@@ -238,7 +240,13 @@ def extract_story(fn, data):
     # Append is now as simple as add new metadata at point
     # Add to jump list
     # Append body to other body.
-    body = find_body(fn, soup)
+    try:
+       body = find_body(fn, soup)
+    except:
+       body = None
+
+    if body is None:
+        print("Didn't find body in", fn)
 
     footers = find_footer(fn, data)
 
@@ -272,14 +280,14 @@ def get_story_datas(needed):
     center_match_title = 0
     skipped = 0
 
-    with mp.Pool(3) as pool:
+    with mp.Pool(1) as pool:
         sorted_processed = sorted(needed.items())
 
-        #for i, (url, fn) in enumerate(sorted_processed):
-        #    data = extract(fn)
+        for i, (url, fn) in enumerate(sorted_processed):
+            data = extract(fn)
 
-        datas = pool.imap(extract, map(lambda e: e[1], sorted_processed))
-        for i, ((url, fn), data) in enumerate(zip(tqdm(sorted_processed), datas)):
+        #datas = pool.imap(extract, map(lambda e: e[1], sorted_processed))
+        #for i, ((url, fn), data) in enumerate(zip(tqdm(sorted_processed), datas)):
 #            if i > 100:
 #                break
 
@@ -383,52 +391,10 @@ print_grouping_info(groupings)
 print()
 
 
-'''
-groupings_b = {}
-for name in processed:
-    #name = name.replace('https://www.dwiggie.com/', '')
-
-    # path (e.g /old_2007/) matters
-    path = os.path.dirname(name)
-    title = os.path.basename(name)
-
-    match = re.match('([a-z]+[0-9]*)([a-z]*).htm', title)
-    if not match:
-        # About 20 files like ann1_2.htm, laura8-9.htm
-        print_weird(name)
-        continue
-
-    assert title.endswith('.htm'), (name, processed[name])
-    title, part = match.groups()
-    if len(part) > 1:
-        print_weird(title)
-        continue
-
-    key = path + '/' + title + '.htm'
-    if key not in groupings_b:
-        groupings_b[key] = []
-    groupings_b[key].append(name)
-
-for k in groupings_b:
-    groupings_b[k].sort()
-
-print_grouping_info(groupings_b)
-print()
-
-def shorten(l):
-    return [a.replace(DWIGGIE_PREFIX, "DWG/") for a in l]
-
-for k in sorted(set(groupings.keys()) | set(groupings_b.keys())):
-    a = groupings.get(k, [])
-    b = groupings_b.get(k, [])
-    if a != b:
-        print_weird("Mismatch ({:30}):".format(k), shorten(a), shorten(b))
-'''
-
 # NOTE(SETH): set True and run once.
 story_data = "story_datas.json"
-if True:
-#if False:
+#if True:
+if False:
     datas = get_story_datas(processed)
     with open(story_data, 'w') as f:
         json.dump(datas, f)
@@ -455,6 +421,10 @@ for story, urls in groupings.items():
 
     multi_pagers += 1
     multi_pages += len(urls)
+
+    if any(url not in processed for url in urls):
+        print ("Skipping", story, "missing one or more parts")
+        continue
 
     fns = [processed[url] for url in urls]
     story_datas = [datas[url] for url in urls]
@@ -490,7 +460,7 @@ for story, urls in groupings.items():
         print()
 
 one_pagers = stories - multi_pagers
-print ("{} html pages => {} stories ({} ({:.1f}%) 1 page, {} ({:.1f}%) 2+ pages)".format(
+print ("\n{} html pages => {} stories ({} ({:.1f}%) 1 page, {} ({:.1f}%) 2+ pages)".format(
     html_pages, stories,
     one_pagers, 100 * one_pagers / stories,
     multi_pagers, 100 * multi_pagers / stories))
