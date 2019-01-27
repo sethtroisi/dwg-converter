@@ -3,6 +3,7 @@
 import json
 import os
 import re
+import sys
 
 import multiprocessing as mp
 from collections import Counter, defaultdict
@@ -12,8 +13,14 @@ from bs4 import BeautifulSoup
 from tqdm import tqdm
 from word2number import w2n
 
+# shared code in utils.py
+import utils
+
+
+###### CONFIG VARIABLE ######
+
+
 STORY_JSON_PATH="dwg_stories-2018_12_15.json"
-STORY_DIRECTORY = "stories/"
 
 DWIGGIE_PREFIX = "https://www.dwiggie.com/derby/"
 
@@ -32,7 +39,6 @@ SHOW_STORY_NAMING_ODDITIES = False
 PRINT_FOOTER_DIFFS = False
 
 
-
 def print_weird(*objects, **kwargs):
     global PRINT_COUNT
     PRINT_COUNT += 1
@@ -41,21 +47,7 @@ def print_weird(*objects, **kwargs):
     print()
 
 
-assert os.path.exists(STORY_DIRECTORY)
-
-def get_file(cached_filename):
-    # this finds, caches, and opens a copy of a remote file
-
-    # Check if we already downloaded & saved locally
-    cache_name = STORY_DIRECTORY + cached_filename
-
-    if os.path.exists(cache_name):
-        with open(cache_name, "r", encoding="utf-8") as cached:
-            page_data = cached.read()
-        return page_data
-
-    print('FILES SHOULD ALREADY BE DOWNLOADED')
-    assert False
+assert os.path.exists(utils.STORY_DIRECTORY)
 
 
 def find_body(fn, soup):
@@ -66,9 +58,19 @@ def find_body(fn, soup):
     # <center><h3><font size=+1 color="#336666">A Blind Date ~ Section V</font></h3></center>
     # <center><h3><font size=+1 color="#336666">By Meghan</font></h3></center>
 
+    size_children = -1
+    node = None
     for child in soup.recursiveChildGenerator():
-        if len(getattr(child, "contents", [])) > 10:
-            return len(child.contents), len(str(child))
+        num_children = len(getattr(child, "contents", []))
+        if num_children >= 10:
+            test_size = len(str(child))
+            if test_size > size_children:
+                node = child
+                size_children = test_size
+
+    assert node is not None, fn
+
+    return len(node.contents), len(str(node))
 
 
 def find_footer(fn, data):
@@ -207,7 +209,7 @@ def filter_chapters(fn, chapters):
 
 
 def extract(fn):
-    return extract_story(fn, get_file(fn))
+    return extract_story(fn, utils.get_file(fn))
 
 
 def extract_story(fn, data):
@@ -250,7 +252,6 @@ def extract_story(fn, data):
 
     len_footers = [len(footer) for footer in footers]
     assert 10 < max(len_footers) < MAX_FOOTER, (len_footers, data[-MAX_FOOTER:])
-
 
     return (
         body,
@@ -427,7 +428,7 @@ for k in sorted(set(groupings.keys()) | set(groupings_b.keys())):
 # NOTE(SETH): set True and run once.
 story_data = "story_datas.json"
 if True:
-#if True:
+#if False:
     datas = get_story_datas(processed)
     with open(story_data, 'w') as f:
         json.dump(datas, f)
@@ -436,16 +437,24 @@ else:
         datas = json.load(f)
 
 
-multi_page = 0
-pages = 0
+html_pages = 0
+stories = 0
+multi_pagers = 0
+
+multi_pages = 0
 has_chapters = 0
 has_incrementing_chapters = 0
 count_chapters = 0
+
 for story, urls in groupings.items():
+    html_pages += len(urls)
+    stories += 1
+
     if len(urls) == 1:
         continue
 
-    multi_page += 1
+    multi_pagers += 1
+    multi_pages += len(urls)
 
     fns = [processed[url] for url in urls]
     story_datas = [datas[url] for url in urls]
@@ -459,10 +468,7 @@ for story, urls in groupings.items():
     all_chapters = []
     chapters_consistent = True
     for data in story_datas:
-        if len(data) == 1:
-            break
-
-        pages += 1
+        assert len(data) == 6, urls
 
         _, titles, centers, chapters, posted_ons, _ = data
 
@@ -483,5 +489,16 @@ for story, urls in groupings.items():
         print_weird(story_chapters)
         print()
 
-print ("{} multi-page-stories, {} pages, {} with chapters, {} with good chapter order, {} total chapters"
-    .format(multi_page, pages, has_chapters, has_incrementing_chapters, count_chapters))
+one_pagers = stories - multi_pagers
+print ("{} html pages => {} stories ({} ({:.1f}%) 1 page, {} ({:.1f}%) 2+ pages)".format(
+    html_pages, stories,
+    one_pagers, 100 * one_pagers / stories,
+    multi_pagers, 100 * multi_pagers / stories))
+
+
+print ("{} multi-page-stories made up of {} pages".format(multi_pagers, multi_pages))
+print ("\t{} ({:.1f}%) stories have perfect chapter order".format(
+    has_incrementing_chapters, 100 * has_incrementing_chapters / multi_pagers))
+print ("\t{} ({:.1f}%) pages have chapters ({} total chapters)".format(
+    has_chapters, 100 * has_chapters / multi_pages, count_chapters))
+
