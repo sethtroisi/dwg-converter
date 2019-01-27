@@ -12,14 +12,14 @@ from bs4 import BeautifulSoup
 from tqdm import tqdm
 from word2number import w2n
 
-
 STORY_JSON_PATH="dwg_stories-2018_12_15.json"
 STORY_DIRECTORY = "stories/"
+
+DWIGGIE_PREFIX = "https://www.dwiggie.com/derby/"
 
 MAX_HEADER = 500
 MAX_FOOTER = 500
 PRINT_COUNT = 0
-
 
 # This actually look very clean
 SHOW_FILTERED_CHAPTERS = False
@@ -240,7 +240,6 @@ def extract_story(fn, data):
 
     footers = find_footer(fn, data)
 
-
     titles = soup.find_all('title')
     assert len(titles) <= 1, titles
     centers = soup.find_all('center')
@@ -280,17 +279,16 @@ def get_story_datas(needed):
 
         datas = pool.imap(extract, map(lambda e: e[1], sorted_processed))
         for i, ((url, fn), data) in enumerate(zip(tqdm(sorted_processed), datas)):
-            if i > 100:
-                break
-
+#            if i > 100:
+#                break
 
             story_data[url] = data
             name = os.path.basename(url)
 
-            print (url, "\t", name)
-            print ("file://" + os.path.abspath(os.path.join(STORY_DIRECTORY, fn)))
-            print (",\n".join(map(str, data)))
-            print ("\n")
+            #print (url, "\t", name)
+            #print ("file://" + os.path.abspath(os.path.join(STORY_DIRECTORY, fn)))
+            #print (",\n".join(map(str, data)))
+            #print ("\n")
             if len(data) == 1:
                 skipped += 1
                 continue
@@ -384,9 +382,52 @@ print_grouping_info(groupings)
 print()
 
 
+'''
+groupings_b = {}
+for name in processed:
+    #name = name.replace('https://www.dwiggie.com/', '')
+
+    # path (e.g /old_2007/) matters
+    path = os.path.dirname(name)
+    title = os.path.basename(name)
+
+    match = re.match('([a-z]+[0-9]*)([a-z]*).htm', title)
+    if not match:
+        # About 20 files like ann1_2.htm, laura8-9.htm
+        print_weird(name)
+        continue
+
+    assert title.endswith('.htm'), (name, processed[name])
+    title, part = match.groups()
+    if len(part) > 1:
+        print_weird(title)
+        continue
+
+    key = path + '/' + title + '.htm'
+    if key not in groupings_b:
+        groupings_b[key] = []
+    groupings_b[key].append(name)
+
+for k in groupings_b:
+    groupings_b[k].sort()
+
+print_grouping_info(groupings_b)
+print()
+
+def shorten(l):
+    return [a.replace(DWIGGIE_PREFIX, "DWG/") for a in l]
+
+for k in sorted(set(groupings.keys()) | set(groupings_b.keys())):
+    a = groupings.get(k, [])
+    b = groupings_b.get(k, [])
+    if a != b:
+        print_weird("Mismatch ({:30}):".format(k), shorten(a), shorten(b))
+'''
+
 # NOTE(SETH): set True and run once.
 story_data = "story_datas.json"
 if True:
+#if True:
     datas = get_story_datas(processed)
     with open(story_data, 'w') as f:
         json.dump(datas, f)
@@ -438,6 +479,7 @@ for story, urls in groupings.items():
 
     if not chapters_consistent and SHOW_BAD_CHAPTER_ORDER:
         print("\t", fns)
+        print("\t", urls)
         print_weird(story_chapters)
         print()
 
