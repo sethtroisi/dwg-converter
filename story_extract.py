@@ -25,26 +25,13 @@ STORY_JSON_PATH="dwg_stories-2018_12_15.json"
 
 MAX_HEADER = 500
 MAX_FOOTER = 500
-PRINT_COUNT = 0
 
 # This actually look very clean
 SHOW_FILTERED_CHAPTERS = False
 SHOW_BAD_CHAPTER_ORDER = False
 
-# Show any oddities with names of stories
-SHOW_STORY_NAMING_ODDITIES = False
-
 # This are harder to tell but mostly look good.
 PRINT_FOOTER_DIFFS = False
-
-
-def print_weird(*objects, **kwargs):
-    global PRINT_COUNT
-    PRINT_COUNT += 1
-    print("(", PRINT_COUNT, ") ", sep="", end="")
-    print(*objects, **kwargs)
-    print()
-
 
 assert os.path.exists(utils.STORY_DIRECTORY)
 
@@ -235,15 +222,15 @@ def extract_story(fn, data):
     # Append is now as simple as add new metadata at point
     # Add to jump list
     # Append body to other body.
-    body = find_body(fn, soup)
-    body_size = len(str(body))
+    body = str(find_body(fn, soup))
+    body_size = len(body)
 
-    if body is None:
+    if body is None or body_size == 0:
         print("Didn't find body in", fn)
     elif len(data) > 3000 and body_size < 0.8 * len(data):
         print("Body({}) is {:.1f} for {}".format(
             body_size, 100.0 * body_size / len(data), fn))
-        print ("\tend:", str(body)[-50:])
+        print ("\tend: \"{}\"".format(body[-50:].replace('\n', '')))
 
     footers = find_footer(fn, data)
 
@@ -257,7 +244,6 @@ def extract_story(fn, data):
 
     len_footers = [len(footer) for footer in footers]
     assert 10 < max(len_footers) < MAX_FOOTER, (len_footers, data[-MAX_FOOTER:])
-
 
     return (
         body,
@@ -281,11 +267,11 @@ def get_story_datas(needed):
     with mp.Pool(3) as pool:
         sorted_processed = sorted(needed.items())
 
-        #datas = pool.imap(extract, map(lambda e: e[1], sorted_processed))
-        #for i, ((url, fn), data) in enumerate(zip(tqdm(sorted_processed), datas)):
+        datas = pool.imap(extract, map(lambda e: e[1], sorted_processed))
+        for i, ((url, fn), data) in enumerate(zip(tqdm(sorted_processed), datas)):
 
-        for i, (url, fn) in enumerate(tqdm(sorted_processed)):
-            data = extract(fn)
+        #for i, (url, fn) in enumerate(tqdm(sorted_processed)):
+        #    data = extract(fn)
 
             story_data[url] = data
             name = os.path.basename(url)
@@ -324,73 +310,17 @@ def get_story_datas(needed):
 ########## MAIN ##############
 
 
-with open(STORY_JSON_PATH, "r") as story_json_file:
-    processed, out_links = json.load(story_json_file)
+with open(utils.URL_DATA_PATH, "r") as url_data_file:
+    processed, out_links, groupings = json.load(url_data_file)
 assert len(processed) > 0
 assert len(out_links) > 0
-
-
-# Recursively build the list of urls reachable by clicking links
-# NOTE: because of "beginning" links the group is the same no matter
-# what story you start with in the group.
-
-groupings = {}
-seen = set()
-for url in processed:
-    if url in seen:
-        # part of some existing group
-        continue
-
-    open_links = set(out_links[url])
-    group = set([url])
-
-    while len(open_links):
-        other = open_links.pop()
-
-        if other in group: continue
-        group.add(other)
-
-        if other in out_links:
-            open_links.update(out_links[other])
-        else:
-            print("Not processed?:", other)
-
-    # need some "canonical" url
-    leader = min(group)
-
-    # sort 1aa after 1z
-    group = sorted(group, key=lambda e: (len(e), e))
-
-    groupings[leader] = group
-    seen.update(group)
-
-    if len(group) > 1 and SHOW_STORY_NAMING_ODDITIES:
-        prefix = os.path.commonprefix(group)
-        suffix = [g[len(prefix):].replace('.htm', '') for g in group]
-
-        # Known wierd case of <author> folled by <author>1b
-        test = [""] + ['1' + chr(98 + i) for i in range(len(group) - 1)]
-        known_issue = test == suffix
-
-        if not known_issue and (suffix[0] != "" or any(len(u) > 1 for u in suffix)):
-            print_weird(prefix + suffix[0] + ".htm", suffix)
-
-
-def print_grouping_info(groups):
-    page_count = Counter([len(group) for group in groups.values()])
-    print ("{} groupings:".format(sum(page_count.values())))
-    for pages, count in sorted(page_count.items()):
-        print ("\t{} pages x {} stories".format(pages, count))
-
-
-print_grouping_info(groupings)
-print()
+assert len(groupings) > 0
 
 
 # NOTE(SETH): set True and run once.
 story_data = "story_datas.json"
-if True:
-#if False:
+#if True:
+if False:
     datas = get_story_datas(processed)
     with open(story_data, 'w') as f:
         json.dump(datas, f)

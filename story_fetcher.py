@@ -13,12 +13,18 @@ import utils
 
 ###### CONFIG VARIABLE ######
 
-
 SHOW_EXTERNAL_LINKS = False
 
-INPUT_CSV_PATH = 'dwg-posts-2019-01-26.csv'
-STORY_JSON_PATH= 'dwg_stories-2018_12_15.json'
+# Show any oddities with names of stories
+SHOW_STORY_NAMING_ODDITIES = False
 
+INPUT_CSV_PATH = 'dwg-posts-2019-01-26.csv'
+
+#Input CSV file should have the following columns with names specified in main below:
+ARCHIVE_URL_INDX = 8
+
+
+############################
 
 LINK_RE = re.compile(r'<a href="([^"]*)"')
 
@@ -49,9 +55,6 @@ DERBY_DIRS = [
 ]
 
 
-#Input CSV file should have the following columns with names specified in main below:
-archive_url_indx = 8
-
 if not os.path.exists(utils.STORY_RAW):
     os.mkdir(utils.STORY_RAW)
 
@@ -71,7 +74,7 @@ def get_csv_archive_urls():
         header = csv_input.pop(0)
 
         # verify important column assumptions
-        assert header[archive_url_indx] == 'archive real url'
+        assert header[ARCHIVE_URL_INDX] == 'archive real url'
 
         # While first entry of last line isn't a date
         while not re.match(r'^(20[01][0-9]|19[89][0-9])',  csv_input[-1][0]):
@@ -82,7 +85,7 @@ def get_csv_archive_urls():
 
         found = 0
         for i, line in enumerate(csv_input):
-            archive_url = line[archive_url_indx]
+            archive_url = line[ARCHIVE_URL_INDX]
             if archive_url != '':
                 yield archive_url
 
@@ -197,10 +200,59 @@ def fetch_all_urls_recursively():
     return processed, out_links
 
 
+def group_posts_into_stories(processed, out_links):
+    groupings = {}
+    seen = set()
+    for url in processed:
+        if url in seen:
+            # part of some existing group
+            continue
+
+        open_links = set(out_links[url])
+        group = set([url])
+
+        while len(open_links):
+            other = open_links.pop()
+
+            if other in group: continue
+            group.add(other)
+
+            if other in out_links:
+                open_links.update(out_links[other])
+            else:
+                print("Not processed?:", other)
+
+        # need some "canonical" url
+        leader = min(group)
+
+        # sort 1aa after 1z
+        group = sorted(group, key=lambda e: (len(e), e))
+
+        groupings[leader] = group
+        seen.update(group)
+
+        if len(group) > 1 and SHOW_STORY_NAMING_ODDITIES:
+            prefix = os.path.commonprefix(group)
+            suffix = [g[len(prefix):].replace('.htm', '') for g in group]
+
+            # Known wierd case of <author> folled by <author>1b
+            test = [""] + ['1' + chr(98 + i) for i in range(len(group) - 1)]
+            known_issue = test == suffix
+
+            if not known_issue and (suffix[0] != "" or any(len(u) > 1 for u in suffix)):
+                print_weird(prefix + suffix[0] + ".htm", suffix)
+
+    return groupings
+
+
+
+
 ########## MAIN ##############
 
 
 processed, out_links = fetch_all_urls_recursively()
+# BROKEN
+processed.pop('https://www.dwiggie.com/derby/oldb/laura8-9.htm')
 
 # Find any file in the CACHE_DIR that shouldn't be there
 bad = []
@@ -220,15 +272,26 @@ for key, filename in processed.items():
 for key, fn in not_dl:
     processed.pop(key)
     out_links.pop(key)
-print('\n{} not downloaded files:'.format(len(not_dl)))
-for key in not_dl:
-    print('\t', key)
+if len(not_dl):
+    print('\n{} not downloaded files: {}\n'.format(len(not_dl)), nod_dl[:10])
 
 
 print('\n\n{} files'.format(len(processed)))
 print('\twith {} outgoing links'.format(
     sum([len(links) for links in out_links.values()])))
 
+
+# Recursively build the list of urls reachable by clicking links on a page.
+# NOTE: because of the backwards "beginning" links the group is the same no
+#       matter what story you start with in the group.
+
+groupings = group_posts_into_stories(processed, out_links)
+
+page_count = Counter([len(group) for group in groupings.values()])
+print ("{} groupings:".format(sum(page_count.values())))
+for pages, count in sorted(page_count.items()):
+    print ("\t{} pages x {} stories".format(pages, count))
+
 # Save this data to a file for use in story_extract.py
-with open(STORY_JSON_PATH, 'w') as story_json_file:
-    json.dump((processed, out_links), story_json_file)
+with open(utils.URL_DATA_PATH, 'w') as f:
+    json.dump((processed, out_links, groupings), f)

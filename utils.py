@@ -7,6 +7,9 @@ import urllib.request
 import chardet
 
 
+# Stories ({map of url to filename},
+URL_DATA_PATH= 'url_data.json'
+
 
 SLEEP_TIME = 2
 
@@ -20,8 +23,18 @@ DWG_FORUM_SCRIPT = ('<script type="text/javascript" src='
                     '</script>')
 
 
+PRINT_COUNT = 0
+def print_weird(*objects, **kwargs):
+    global PRINT_COUNT
+    PRINT_COUNT += 1
+    print("(", PRINT_COUNT, ") ", sep="", end="")
+    print(*objects, **kwargs)
+    print()
+
+
 def hash_url(url):
     return hashlib.md5(url.encode()).hexdigest()
+
 
 def get_raw_file(cached_filename, url=None):
     # this finds, caches, and opens a copy of a remote file
@@ -65,9 +78,9 @@ def get_file(cached_filename, url=None):
     encoding.pop('language') # not used
     print ("\tEncoding guess: {}".format(encoding))
 
- #   if encoding['encoding'] == 'Windows-1254':
- #       encoding['encoding'] = 'Windows-1250'
- #       print ("\tOVERRIDING SETTING:", encoding['encoding'])
+    if encoding['encoding'] == 'Windows-1254':
+        encoding['encoding'] = 'mac_iceland'
+        print ("\tOVERRIDING SETTING:", encoding['encoding'])
 
     # Figure out where to store encodings.
 
@@ -147,3 +160,7 @@ utf-8
 	2 x confidence: 0.752
 	1 x confidence: 0.938
 """
+
+# texts = [b'vis-\x88-vis', b't\x90te-\x88', b'Bl\x81thne B\x94sendor']
+# chars = u' \u00EA \u00E0 \u00FC \u00F6 '
+# encodings = ['ascii', 'cp037', 'cp273', 'cp424', 'cp437', 'cp500', 'cp720', 'cp737', 'cp775', 'cp850', 'cp852', 'cp855', 'cp856', 'cp857', 'cp858',      'cp860', 'cp861', 'cp862', 'cp863', 'cp864', 'cp865', 'cp866', 'cp869', 'cp874', 'cp875', 'cp932', 'cp949', 'cp950', 'cp1006', 'cp1026',     'cp1125', 'cp1140', 'cp1250', 'cp1251', 'cp1252', 'cp1253', 'cp1254', 'cp1255', 'cp1256', 'cp1257', 'cp1258', 'cp65001', 'latin_1', 'iso8859_2', 'iso8859_3', 'iso8859_4', 'iso8859_5', 'iso8859_6', 'iso8859_7', 'iso8859_8', 'iso8859_9', 'iso8859_10', 'iso8859_11', 'iso8859_13', 'iso8859_14', 'iso8859_15', 'iso8859_16', 'mac_cyrillic', 'mac_greek', 'mac_iceland', 'mac_latin2', 'mac_roman', 'mac_turkish', 'ptcp154', 'utf_7', 'utf_8', 'utf_8_sig']
