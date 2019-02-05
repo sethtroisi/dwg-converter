@@ -104,7 +104,9 @@ def fetch_all_urls_recursively():
 
     # current urls to explore
     urls = set(archive_urls)
+
     filter_count = {name: 0 for name in FILTER_RE}
+
     weird = 0
 
     while len(urls) > 0:
@@ -134,7 +136,7 @@ def fetch_all_urls_recursively():
             skip_download = False
             page_data = utils.get_file(name, None if skip_download else url)
         except Exception as e:
-            print('Got error with "{}" skipping: {}'.format(url, e))
+            print('Got error with "{}" ("{}") skipping: {}'.format(name, url, e))
             print()
             continue
 

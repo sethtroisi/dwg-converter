@@ -23,8 +23,6 @@ import utils
 
 STORY_JSON_PATH="dwg_stories-2018_12_15.json"
 
-DWIGGIE_PREFIX = "https://www.dwiggie.com/derby/"
-
 MAX_HEADER = 500
 MAX_FOOTER = 500
 PRINT_COUNT = 0
@@ -69,9 +67,7 @@ def find_body(fn, soup):
                 node = child
                 size_children = test_size
 
-    if not node:
-        return None
-    return len(node.contents), len(str(node))
+    return node
 
 
 def find_footer(fn, data):
@@ -210,7 +206,6 @@ def filter_chapters(fn, chapters):
 
 
 def extract(fn):
-    print ("Hi", fn)
     return extract_story(fn, utils.get_file(fn))
 
 
@@ -240,13 +235,15 @@ def extract_story(fn, data):
     # Append is now as simple as add new metadata at point
     # Add to jump list
     # Append body to other body.
-    try:
-       body = find_body(fn, soup)
-    except:
-       body = None
+    body = find_body(fn, soup)
+    body_size = len(str(body))
 
     if body is None:
         print("Didn't find body in", fn)
+    elif len(data) > 3000 and body_size < 0.8 * len(data):
+        print("Body({}) is {:.1f} for {}".format(
+            body_size, 100.0 * body_size / len(data), fn))
+        print ("\tend:", str(body)[-50:])
 
     footers = find_footer(fn, data)
 
@@ -260,6 +257,7 @@ def extract_story(fn, data):
 
     len_footers = [len(footer) for footer in footers]
     assert 10 < max(len_footers) < MAX_FOOTER, (len_footers, data[-MAX_FOOTER:])
+
 
     return (
         body,
@@ -280,16 +278,14 @@ def get_story_datas(needed):
     center_match_title = 0
     skipped = 0
 
-    with mp.Pool(1) as pool:
+    with mp.Pool(3) as pool:
         sorted_processed = sorted(needed.items())
-
-        for i, (url, fn) in enumerate(sorted_processed):
-            data = extract(fn)
 
         #datas = pool.imap(extract, map(lambda e: e[1], sorted_processed))
         #for i, ((url, fn), data) in enumerate(zip(tqdm(sorted_processed), datas)):
-#            if i > 100:
-#                break
+
+        for i, (url, fn) in enumerate(tqdm(sorted_processed)):
+            data = extract(fn)
 
             story_data[url] = data
             name = os.path.basename(url)
@@ -393,8 +389,8 @@ print()
 
 # NOTE(SETH): set True and run once.
 story_data = "story_datas.json"
-#if True:
-if False:
+if True:
+#if False:
     datas = get_story_datas(processed)
     with open(story_data, 'w') as f:
         json.dump(datas, f)

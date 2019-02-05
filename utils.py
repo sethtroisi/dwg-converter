@@ -65,9 +65,21 @@ def get_file(cached_filename, url=None):
     encoding.pop('language') # not used
     print ("\tEncoding guess: {}".format(encoding))
 
+ #   if encoding['encoding'] == 'Windows-1254':
+ #       encoding['encoding'] = 'Windows-1250'
+ #       print ("\tOVERRIDING SETTING:", encoding['encoding'])
+
     # Figure out where to store encodings.
 
-    page_data = raw_page_data.decode(encoding['encoding'])
+    try:
+        page_data = raw_page_data.decode(encoding['encoding'])
+    except UnicodeDecodeError as e:
+        # Could attemp something here
+        test = [a for a in str(e).replace(':', '').split() if a.isnumeric()]
+        test = int(test[0])
+        print (test, raw_page_data[test - 15: test + 5])
+        raise e
+
     # Used when extracting forum posts, harmless in general
     page_data = page_data.replace(DWG_FORUM_SCRIPT, '')
 
