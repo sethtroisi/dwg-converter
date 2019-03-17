@@ -16,6 +16,7 @@ And combine them into single page stories
   * The complete header is ```last_update/Posting,date_created,Msg Id,author_id,author_name,title_name,comments,new posting - real url,archive real url,FinalPost?,WhichBook?,Archive Title,Archive Title ID,URL,```
 
 **`story_archive_template.html`** Best guess at the historical template used to archive forum posts
+  * `back.gif` and `stories.css` are referenced here 
 
 **`story_joined_template.html`** Template for joining multitple stories
 
@@ -46,5 +47,12 @@ Several helper scripts exist
 ## Workflows
 
 ```
-  # Run 
+# Download all stories locally, creates stories_raw/ and stories/
+# Saves a map of URL => local file in url_data.json
+# e.g. "https://www.dwiggie.com/derby/olde/gabby1.htm" => "99cc07d1fcb85292819b4766922081e6.html")
+python story_fetcher.py 
 
+# Extract post metadata and story into post_datas.json
+python story_extract.py
+```  
+  
