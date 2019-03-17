@@ -7,7 +7,7 @@ import time
 
 INPUT_CSV_PATH = "dwg-posts-2018-12-11.csv"
 OUTPUT_CSV_PATH="dwg_index_update-2018_12_10_.csv"
-ARCHIVE_TEMPLATE = "story_archive_template.html"
+ARCHIVE_TEMPLATE = "templates/story_archive_template.html"
 CACHE_DIRECTORY = "cache/"
 #Input CSV file should have the following columns with names specified in main below:
 post_date_indx = 0

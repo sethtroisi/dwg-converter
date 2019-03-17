@@ -32,7 +32,7 @@ SHOW_BAD_CHAPTER_ORDER = False
 # This are harder to tell but mostly look good.
 PRINT_FOOTER_DIFFS = False
 
-STORY_TEMPLATE = "story_joined_template.html"
+STORY_TEMPLATE = "templates/story_joined_template.html"
 STORY_DIR = "cache"
 
 assert os.path.exists(utils.STORY_DIRECTORY)
