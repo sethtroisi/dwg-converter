@@ -7,7 +7,8 @@ import sys
 sys.setrecusionlimit = 10000
 
 import multiprocessing as mp
-from collections import Counter, defaultdict
+from collections import defaultdict
+from collections import Counter, OrderedDict
 
 import roman
 from bs4 import BeautifulSoup
@@ -21,8 +22,6 @@ import utils
 ###### CONFIG VARIABLE ######
 
 
-STORY_JSON_PATH="dwg_stories-2018_12_15.json"
-
 MAX_HEADER = 500
 MAX_FOOTER = 500
 
@@ -33,7 +32,13 @@ SHOW_BAD_CHAPTER_ORDER = False
 # This are harder to tell but mostly look good.
 PRINT_FOOTER_DIFFS = False
 
+STORY_TEMPLATE = "story_joined_template.html"
+STORY_DIR = "cache"
+
 assert os.path.exists(utils.STORY_DIRECTORY)
+
+if not os.path.exists(STORY_DIR):
+    os.mkdir(STORY_DIR)
 
 
 def find_body(fn, soup):
@@ -54,6 +59,7 @@ def find_body(fn, soup):
                 node = child
                 size_children = test_size
 
+    # TODO this could also return a guess at the footer.
     return node
 
 
@@ -92,7 +98,7 @@ def find_footer(fn, data):
     footer2 = footer2.strip()
 
     if PRINT_FOOTER_DIFFS and footer1 != footer2:
-        print_weird(fn)
+        utils.print_weird(fn)
         print(80 * "-")
         if footer1 == "":
             print("No footer1:")
@@ -179,7 +185,7 @@ def filter_chapters(fn, chapters):
         # Check if HTML looks like a chapter (tags and stuff)
         if not good_chapter(chapter):
             if SHOW_FILTERED_CHAPTERS:
-                print_weird('Filtered HTML Chapter {}: "{}"'.format(
+                utils.print_weird('Filtered HTML Chapter {}: "{}"'.format(
                     fn, str(chapter.parent)[:100]).replace('\n', ''))
             continue
 
@@ -187,19 +193,19 @@ def filter_chapters(fn, chapters):
         number, processed = chapter_number(text)
         if number is None:
             if SHOW_BAD_CHAPTER_ORDER:
-                print_weird('Failed "{}" => "{}"'.format(text, processed))
+                utils.print_weird('Failed "{}" => "{}"'.format(text, processed))
             continue
         yield number
 
 
 def extract(fn):
-    return extract_story(fn, utils.get_file(fn))
+    return extract_post(fn, utils.get_file(fn))
 
 
-def extract_story(fn, data):
-    # grab story and author from center tags.
+def extract_post(fn, data):
+    # grab post and author from center tags.
     # find <hr> ... Beginning, <links> ... <hr>
-    #    <STORY>
+    #    <POST>
     #   [link to next]
     # <hr>
     # copyright
@@ -233,6 +239,8 @@ def extract_story(fn, data):
         print ("\tend: \"{}\"".format(body[-50:].replace('\n', '')))
 
     footers = find_footer(fn, data)
+    # footer techinique 2 is better.
+    footer = footers[1]
 
     titles = soup.find_all('title')
     assert len(titles) <= 1, titles
@@ -251,12 +259,12 @@ def extract_story(fn, data):
         get_texts(centers),
         chapters,
         get_ns_texts(posted_ons),
-        len_footers,
+        footer,
     )
 
 
-def get_story_datas(needed):
-    story_data = {}
+def get_post_datas(needed):
+    post_data = {}
     num_titles = 0
     num_centers = 0
     has_chapters = 0
@@ -273,7 +281,7 @@ def get_story_datas(needed):
         #for i, (url, fn) in enumerate(tqdm(sorted_processed)):
         #    data = extract(fn)
 
-            story_data[url] = data
+            post_data[url] = data
             name = os.path.basename(url)
 
             #print (url, "\t", name)
@@ -302,7 +310,90 @@ def get_story_datas(needed):
     print("Stories with posted on:", has_posted_on)
     print("Skipped:", skipped)
 
-    return story_data
+    return post_data
+
+
+def join_posts(urls, filenames, story_data):
+    bodies = []
+    story_titles  = []
+    story_centers = []
+    story_chapters = []
+    story_posted_ons = []
+    story_footers = []
+
+    # Make a list of X for each story
+    for body, titles, centers, chapters, posted_ons, footers in story_data:
+        bodies.append(body)
+        story_titles.extend(titles)
+        story_centers.extend(centers)
+        story_chapters.extend(chapters)
+        story_posted_ons.extend(posted_ons)
+        story_footers.extend(footers)
+
+    # TODO select some smaller set of story_posted_ons
+    #   (evenly spaced or something)
+    # TODO get a real footer
+
+    footer = "TODO"
+    author = "TODO"
+    copyright = "TODO"
+
+    # What to do if all titles don't match ...
+    story_titles = list(OrderedDict.fromkeys(story_titles).keys())
+    if len(story_titles) != 1:
+        utils.print_weird(story_titles)
+
+    CENTER_FMT_STRING = '<center><h3><font color="#336666">{}</font></h3></center>'
+    SEPERATOR = '\n<hr><p>\n'
+    POSTED_ON_FMT_STRING = '<i>{}</i><p>'
+    HTML_COMMENT = '<!-- {} -->'
+    COPYRIGHT_HTML = '&copy; {} Copyright held by the author.'
+    LINK_HTML = '<a href="{}">{}</a><br>'
+
+    html_title = "\n".join(CENTER_FMT_STRING.format(t) for t in story_titles)
+    html_author = CENTER_FMT_STRING.format("By " + author)
+
+    html_posted_on = "\n".join(POSTED_ON_FMT_STRING.format(posted_on)
+        for posted_on in story_posted_ons)
+
+    html_copyright = COPYRIGHT_HTML.format(copyright)
+
+    html_body = ""
+    og_links = []
+    for url, body in zip(urls, bodies):
+        # remove wrapping <ul> tag
+        if body.startswith("<ul>") and body.endswith("</ul>"):
+            body = body[4:-5]
+
+        html_body += HTML_COMMENT.format(url)
+        html_body += "\n\n"
+        html_body += body
+        html_body += "\n\n"
+
+        og_links.append(LINK_HTML.format(url, os.path.basename(url)))
+
+    content = SEPERATOR.join([
+        html_title + html_author,
+        html_posted_on,
+        html_body,
+        "Compressed from<br>" + "\n".join(og_links),
+        html_copyright,
+    ])
+
+    output_name = os.path.join(STORY_DIR, filenames[0])
+    # TODO cache at top of file
+    with open(STORY_TEMPLATE) as template_file:
+        template = template_file.read()
+
+    new_story = (template
+        .replace("$TITLE", story_titles[0])
+        .replace("$CONTENT", content))
+
+    with open(output_name, "w", encoding="utf-8") as output_file:
+        output_file.write(new_story)
+
+    print ("Saved new combined story({}) to {}".format(
+        len(urls), output_name))
 
 
 
@@ -318,14 +409,14 @@ assert len(groupings) > 0
 
 
 # NOTE(SETH): set True and run once.
-story_data = "story_datas.json"
+post_data = "post_datas.json"
 #if True:
 if False:
-    datas = get_story_datas(processed)
-    with open(story_data, 'w') as f:
+    datas = get_post_datas(processed)
+    with open(post_data, 'w') as f:
         json.dump(datas, f)
 else:
-    with open(story_data, 'r') as f:
+    with open(post_data, 'r') as f:
         datas = json.load(f)
 
 
@@ -352,14 +443,11 @@ for story, urls in groupings.items():
         print ("Skipping", story, "missing one or more parts")
         continue
 
-    fns = [processed[url] for url in urls]
+    filenames = [processed[url] for url in urls]
     story_datas = [datas[url] for url in urls]
     if any(len(data) == 1 for data in story_datas):
         continue
 
-#    print(story)
-#    print("\t", urls)
-#    print("\t", fns)
     story_chapters = []
     all_chapters = []
     chapters_consistent = True
@@ -380,9 +468,9 @@ for story, urls in groupings.items():
     count_chapters += len(all_chapters)
 
     if not chapters_consistent and SHOW_BAD_CHAPTER_ORDER:
-        print("\t", fns)
+        print("\t", filenames)
         print("\t", urls)
-        print_weird(story_chapters)
+        utils.print_weird(story_chapters)
         print()
 
 one_pagers = stories - multi_pagers
@@ -397,4 +485,21 @@ print ("\t{} ({:.1f}%) stories have perfect chapter order".format(
     has_incrementing_chapters, 100 * has_incrementing_chapters / multi_pagers))
 print ("\t{} ({:.1f}%) pages have chapters ({} total chapters)".format(
     has_chapters, 100 * has_chapters / multi_pages, count_chapters))
+
+
+
+for story, urls in groupings.items():
+    if len(urls) == 1:
+        continue
+
+    if any(url not in processed for url in urls):
+        print ("Skipping", story, "missing one or more parts")
+        continue
+
+    filenames = [processed[url] for url in urls]
+    story_datas = [datas[url] for url in urls]
+    if any(len(data) == 1 for data in story_datas):
+        continue
+
+    join_posts(urls, filenames, story_datas)
 
