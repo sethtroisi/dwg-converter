@@ -53,6 +53,9 @@ Several helper scripts exist
 python story_fetcher.py
 
 # Extract post metadata and story into post_datas.json
+python story_extract.py regenerate
+
+# Subsequent story_extract.py don't need to read all post data again
 python story_extract.py
 ```
 

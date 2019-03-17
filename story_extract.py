@@ -4,7 +4,6 @@ import json
 import os
 import re
 import sys
-sys.setrecusionlimit = 10000
 
 import multiprocessing as mp
 from collections import defaultdict
@@ -28,6 +27,7 @@ MAX_FOOTER = 500
 # This actually look very clean
 SHOW_FILTERED_CHAPTERS = False
 SHOW_BAD_CHAPTER_ORDER = False
+SHOW_MISMATCHED_TITLES = False
 
 # This are harder to tell but mostly look good.
 PRINT_FOOTER_DIFFS = False
@@ -340,7 +340,7 @@ def join_posts(urls, filenames, story_data):
 
     # What to do if all titles don't match ...
     story_titles = list(OrderedDict.fromkeys(story_titles).keys())
-    if len(story_titles) != 1:
+    if len(story_titles) != 1 and SHOW_MISMATCHED_TITLES:
         utils.print_weird(story_titles)
 
     CENTER_FMT_STRING = '<center><h3><font color="#336666">{}</font></h3></center>'
@@ -400,7 +400,6 @@ def join_posts(urls, filenames, story_data):
 
 ########## MAIN ##############
 
-
 with open(utils.URL_DATA_PATH, "r") as url_data_file:
     processed, out_links, groupings = json.load(url_data_file)
 assert len(processed) > 0
@@ -408,10 +407,9 @@ assert len(out_links) > 0
 assert len(groupings) > 0
 
 
-# NOTE(SETH): set True and run once.
 post_data = "post_datas.json"
-#if True:
-if False:
+if len(sys.argv) > 1 or not os.path.isfile(post_data):
+    print("Regenerating all post data")
     datas = get_post_datas(processed)
     with open(post_data, 'w') as f:
         json.dump(datas, f)
