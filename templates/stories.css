@@ -1,6 +1,7 @@
 body 	{
 	background-color: white;
-	background-image: URL(/derby/back.gif);
+	background-image: URL(/templates/back.gif);
+    background-repeat: repeat-y;
 	}
 
 hr 	{
