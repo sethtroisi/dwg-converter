@@ -4,6 +4,7 @@ import json
 import os
 import re
 import sys
+sys.setrecursionlimit(100000)
 
 import multiprocessing as mp
 from collections import defaultdict
@@ -236,7 +237,9 @@ def extract_post(fn, data):
     elif len(data) > 3000 and body_size < 0.8 * len(data):
         print("Body({}) is {:.1f} for {}".format(
             body_size, 100.0 * body_size / len(data), fn))
-        print ("\tend: \"{}\"".format(body[-50:].replace('\n', '')))
+        print ("\tend: \"{}\" to \"{}\"".format(
+            body[:50].replace('\n', ''),
+            body[-50:].replace('\n', '')))
 
     footers = find_footer(fn, data)
     # footer techinique 2 is better.
@@ -244,6 +247,9 @@ def extract_post(fn, data):
 
     titles = soup.find_all('title')
     assert len(titles) <= 1, titles
+    authors = soup.find_all('author')
+    assert len(authors) <= 1, authors
+
     centers = soup.find_all('center')
 
     chapters = soup.find_all(string=re.compile('chapter', re.I))
@@ -256,6 +262,7 @@ def extract_post(fn, data):
     return (
         body,
         get_texts(titles),
+        get_texts(authors),
         get_texts(centers),
         chapters,
         get_ns_texts(posted_ons),
@@ -292,7 +299,7 @@ def get_post_datas(needed):
                 skipped += 1
                 continue
 
-            _, titles, centers, chapters, posted_ons, _ = data
+            _, titles, authors, centers, chapters, posted_ons, _ = data
             num_titles += len(titles) > 0
             num_centers += len(centers) > 0
             has_chapters += len(chapters) > 0
@@ -316,15 +323,17 @@ def get_post_datas(needed):
 def join_posts(urls, filenames, story_data):
     bodies = []
     story_titles  = []
+    story_authors = []
     story_centers = []
     story_chapters = []
     story_posted_ons = []
     story_footers = []
 
     # Make a list of X for each story
-    for body, titles, centers, chapters, posted_ons, footers in story_data:
+    for body, titles, authors, centers, chapters, posted_ons, footers in story_data:
         bodies.append(body)
         story_titles.extend(titles)
+        story_authors.append(authors)
         story_centers.extend(centers)
         story_chapters.extend(chapters)
         story_posted_ons.extend(posted_ons)
@@ -392,8 +401,8 @@ def join_posts(urls, filenames, story_data):
     with open(output_name, "w", encoding="utf-8") as output_file:
         output_file.write(new_story)
 
-    print ("Saved new combined story({}) to {}".format(
-        len(urls), output_name))
+#    print ("Saved new combined story({}) to {}".format(
+#        len(urls), output_name))
 
 
 
@@ -450,9 +459,9 @@ for story, urls in groupings.items():
     all_chapters = []
     chapters_consistent = True
     for data in story_datas:
-        assert len(data) == 6, urls
+        assert len(data) == 7, urls
 
-        _, titles, centers, chapters, posted_ons, _ = data
+        _, titles, authors, centers, chapters, posted_ons, _ = data
 
         has_chapters += len(chapters) > 0
         story_chapters.append(chapters)
@@ -484,9 +493,8 @@ print ("\t{} ({:.1f}%) stories have perfect chapter order".format(
 print ("\t{} ({:.1f}%) pages have chapters ({} total chapters)".format(
     has_chapters, 100 * has_chapters / multi_pages, count_chapters))
 
-
-
-for story, urls in groupings.items():
+joined = 0
+for story, urls in tqdm(groupings.items()):
     if len(urls) == 1:
         continue
 
@@ -500,4 +508,7 @@ for story, urls in groupings.items():
         continue
 
     join_posts(urls, filenames, story_datas)
+    joined += 1
 
+
+print("Joined {} groups into cache/".format(joined))

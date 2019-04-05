@@ -5,7 +5,7 @@ import urllib.request
 import re
 import time
 
-INPUT_CSV_PATH = "dwg-posts-2018-12-11.csv"
+INPUT_CSV_PATH = "dwg-posts-2019-01-26.csv"
 OUTPUT_CSV_PATH="dwg_index_update-2018_12_10_.csv"
 ARCHIVE_TEMPLATE = "templates/story_archive_template.html"
 CACHE_DIRECTORY = "cache/"
@@ -196,7 +196,7 @@ with open(INPUT_CSV_PATH, encoding='utf-8') as csv_file:
         title = line[title_index]
         author = line[author_index]
 
-        if action == "ArchiveNew":
+        if action == "ArchiveNew" or action == "ArchiveNewFant":
 
             post_url = line[post_url_indx]
             page_data = get_file(msg_id+".html", str(post_url), False)
@@ -225,15 +225,18 @@ with open(INPUT_CSV_PATH, encoding='utf-8') as csv_file:
 
             print()
             converted += 1
-            if converted >= 10:
+            #if converted >= 10:
                 # Quit after converting a couple.
-                break
+            #    break
 
-        elif action == "ArchiveNewFant":
-            # the same action occurs for this and ArchiveNew with exception of designated final directory/index.
-            #TODO implement this
-            #print("Archive New Fantasy: unimplemented")
-            continue
+            if action == "ArchiveNew":
+                # TODO change metadata or save location.
+                pass
+
+            elif action == "ArchiveNewFant":
+                #print("Archive New Fantasy: unimplemented")
+                pass
+
         elif action == "Amend":
             post_url = line[post_url_indx]
             page_data = get_file(msg_id+".html", str(post_url), False)
@@ -310,4 +313,6 @@ with open(INPUT_CSV_PATH, encoding='utf-8') as csv_file:
         #   writer = csv.writer(csv_file)
         #   for line in sorted(results.values()):
         #       writer.writerow(line)
+
+print ("Converted:", converted)
 
