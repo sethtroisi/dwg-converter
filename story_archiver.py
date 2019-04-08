@@ -138,6 +138,7 @@ def get_file(cached_filename, file_is_local, url = ''):
 
                 #page_data = urllib.request.urlopen(url).read().decode("utf-8")
                 request = urllib.request.urlopen(url)
+                # Seems to work for forum posts.
                 charset = request.info().get_content_charset("latin-1")
                 page_data = request.read().decode(charset)
                 page_data = page_data.replace(
@@ -154,7 +155,7 @@ def get_post_msg_body(csv_line):
 #Fetch the body of the text from the post file:
 
     post_url = csv_line[post_url_index]
-    print('\t fetching post url: "{}"'.format(post_url))
+    print('\t fetching post url: "{}" => "{}"'.format(post_url, msg_id))
     page_data = get_file(msg_id+".html", False, str(post_url))
     #print("\t page len:", len(page_data))
     #print("\t", page_data[0:40])
