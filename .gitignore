@@ -1,0 +1,11 @@
+*.csv
+*.json
+
+backup/
+cache/
+
+stories/
+stories_raw/
+story_backup/
+
+__pycache__/
