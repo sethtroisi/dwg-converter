@@ -4,14 +4,27 @@ import re
 
 from bs4 import BeautifulSoup
 
+import subprocess
+#output = subprocess.check_output(["notepad", "test.txt"])
 
-def get_changes(file_data):
+
+# temp = data.replace("\n\n\n\n", "\n").replace("\n\n\n", "\n")
+ANCHOR_FINDER = re.compile('<a *name="*([a-z0-9-]*)"* *\?>')
+
+def save_html(file_path, soup):
+    with open(file_path, "w") as file:
+        file.write(str(soup).replace("<br />", )
+
+def get_changes(file_path, file_data):
     # TODO verify that soup doesn't change message body to dramatically
     soup = BeautifulSoup(file_data, "html.parser")
 
     bodies = soup.find_all(class_="message-body")
     assert len(bodies) == 1, len(bodies)
     body = bodies[0]
+
+    # remove message options from bottom of post
+    body.find(class_="message-options").extract()
 
     file_actions = []
 
@@ -30,6 +43,7 @@ def get_changes(file_data):
             depth += 1
             n = n.parent
 
+        name = child.name if child.name else "<NONE>"
         print("{:2}{}{:8} {:4} | {}".format(
             i, "\t" * depth, name, len(content), content[:60]))
 
@@ -43,6 +57,9 @@ def get_changes(file_data):
         action = input("drq|<line>|<line>-<line>: ").lower()
         if action == "d":
             print("Done with this file!")
+            save_html(
+                file_path.replace(".html", ".soup.html"),
+                body)
             return file_actions, str(body)
         elif action == "r":
             print("Reverting and restarting")
@@ -72,7 +89,6 @@ def get_changes(file_data):
 
 #-------------------
 
-
 TO_FIX_DIR = "cache/"
 POST_REGEX = r'^[0-9]+.html$'
 
@@ -85,13 +101,14 @@ fixes = {}
 
 for fn in os.listdir(TO_FIX_DIR):
     if re.match(POST_REGEX, fn):
-        with open(TO_FIX_DIR + "/" + fn) as forum_file:
+        file_path = TO_FIX_DIR + "/" + fn
+        with open(file_path, encoding="utf-8") as forum_file:
             data = forum_file.read()
 
         print()
         print(fn, len(data))
 
-        file_actions, new_data = get_changes(data)
+        file_actions, new_data = get_changes(file_path, data)
         print("\t", file_actions)
 
         while file_actions == new_data == None:

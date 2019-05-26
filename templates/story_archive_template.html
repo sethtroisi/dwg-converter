@@ -1,27 +1,31 @@
-<!-- This is the new file dwiggie story archive format created by Brenda Troisi March 2019. The archiving code depends on this particular format so don't change it without adapting the code!-->
+<!DOCTYPE html>
 <html>
   <head>
     <meta charset="utf-8">
     <title>$TITLE</title>
-    <link rel="stylesheet" type="text/css" href="stories.css">
+
+<!-- before done: return the leading '/' to both of these file paths:
+-->
+    <link rel="stylesheet" type="text/css" href="style/stories.css">
   </head>
-  <body bgcolor="#ffffff" vlink="#336666" background="back.gif" class="vsc-initialized">
+  <body bgcolor="#ffffff" vlink="#336666" background="derby/back.gif" class="vsc-initialized">
     <ul>
 
     <center><h3><font color="#336666">$TITLE</font></h3></center>
     <center><h3><font color="#336666">By $AUTHOR</font></h3></center>
 
-    <hr><p>
-<hr><p>
-    <i>Posted on $DATE</i><p>
+    <p><hr><p>
 
-    $SECTIONS
-    $OGLINK
-    $BODY
+    $JUMP_SECTION
 
-    <hr><p>
+    $POST_BODY_SECTION
+
+    $CLOSING_SECTION
+
+    <p><hr><p>
+
     &copy; $COPYRIGHT_YEAR Copyright held by the author.
-</div>
+
     </ul>
   </body>
 </html>

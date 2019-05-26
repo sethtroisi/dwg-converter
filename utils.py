@@ -10,7 +10,6 @@ import chardet
 # Stories ({map of url to filename},
 URL_DATA_PATH= 'url_data.json'
 
-
 SLEEP_TIME = 2
 
 # This is for the raw file data.
