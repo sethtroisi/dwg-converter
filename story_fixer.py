@@ -30,7 +30,6 @@ def get_changes(file_data):
             depth += 1
             n = n.parent
 
-        name = child.name if child.name else "<NONE>"
         print("{:2}{}{:8} {:4} | {}".format(
             i, "\t" * depth, name, len(content), content[:60]))
 

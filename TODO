@@ -1,5 +1,7 @@
 cd stories
 
+# Four cases of <p/>
+
 # Fix template in the middle of this story
 vim d6efc674433aa065bf4b4a7959c0dfe7.html
 

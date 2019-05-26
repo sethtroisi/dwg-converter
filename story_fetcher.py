@@ -18,10 +18,10 @@ SHOW_EXTERNAL_LINKS = False
 # Show any oddities with names of stories
 SHOW_STORY_NAMING_ODDITIES = False
 
-INPUT_CSV_PATH = 'dwg-posts-2019-01-26.csv'
+INPUT_CSV_PATH = 'dwg-posts.csv'
 
 #Input CSV file should have the following columns with names specified in main below:
-ARCHIVE_URL_INDX = 8
+ARCHIVE_URL_INDX = 9
 
 
 ############################
