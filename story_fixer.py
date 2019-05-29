@@ -25,8 +25,6 @@ def get_changes(file_path, file_data):
 
     # remove message options from bottom of post
     body.find(class_="message-options").extract()
-    print("Done with this file! Saving as", new_path)
-    save_html(new_path, body)
 
     file_actions = []
 
@@ -111,7 +109,7 @@ STORY_FIXES = "story_fixes.json"
 # story to node text deleted
 fixes = {}
 
-for fn in os.listdir(TO_FIX_DIR):
+for fn in sorted(os.listdir(TO_FIX_DIR)):
     if re.match(POST_REGEX, fn):
         file_path = TO_FIX_DIR + "/" + fn
         with open(file_path, encoding="utf-8") as forum_file:
