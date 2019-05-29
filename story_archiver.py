@@ -108,34 +108,24 @@ def create_filename(author, title, post_date):
     filename = "cache/" + author[:10] + title[:15] + post_date + ".html"
     return(filename)
 
-#TODO I don't think this stripping is working, check it out...
-def strip_comment(post, keyword, caseless = False):
-    # finds and strips the keyword and associated text post but not the following white space
-    # (need to leave that else serial strips might fail)
-    # returns the two seperated strings.
-    # TODO: well, need to worry about case, and optional ": " and any formatting pairs that we truncate...
-    # POST files use "<br />" for single lines and RA as multiline delimiters
-    # TODO archive files use other things - \n or <p>??
-    # so multi line comments need to be delimited with RA. and should be searched for after others to avoid losing info
+def strip_comment(post):
+    # Using story_fixer.py
 
-    #TODO: need to revisit comment stripping, I think this needs to go to next BR.
-    #TODO: this has a problem with text formatting...
+    soup = BeautifulSoup(file_data, "html.parser")
+    DNAs = soup.find_all("DNA")
 
-  resume_archive_tag = "RA"+BR_TAG         #TODO this isn't good, it finds RA in text, will there be a BR_TAG with it?? assume so...
+    blurbs = []
 
-  if caseless:
-      start = end = post.lower().find(keyword.lower())
-  else:
-      start = end = post.find(keyword)
-  if start >= 0:    # found our tag;
-      end = post.find(resume_archive_tag, start)
-  next_br = post.find(BR_TAG, max(start, end))
-  post_dna = post[start: next_br]           # going to leave the trailing white space inline because could have nested comments to strip
-  if post_dna:
-    tempstring = post_dna
-    print('\t REMOVED: "{}"'.format(post_dna))
-    return post.replace(post_dna, ""), tempstring
-  return post, post_dna
+    for dna in DNAs:
+        raw_dna = str(dna)
+        # Soup often transforms html but shouldn't have here.
+        assert raw_dna in post, (dna, raw_dna)
+        post = post.replace(raw, "", 1)
+
+        print('\t REMOVED: "{}"'.format(dna.text))
+        blurbs.append(dna.text)
+
+    return post, " | ".join(blurbs)
 
 
 def find_keyword_string (post, keyword, caseless = False):
@@ -217,69 +207,78 @@ def get_file(cached_filename, file_is_local, url = ''):
     # note that my original copy of this file contains a recursive version of this to handle chaining.
     # i think seth now has implemented that elsewhere in seperate file.
 
-            # Check if we already downloaded & saved locally
-            cached_name = CACHE_DIRECTORY + cached_filename
-            #print('Get/Create this url: "{}"'.format(url))
+    # Check if we already downloaded & saved locally
+    cached_name = CACHE_DIRECTORY + cached_filename
+    #print('Get/Create this url: "{}"'.format(url))
 
-            if os.path.exists(cached_name):
-                with open(cached_name, "r", encoding="utf-8") as cached:
-                    page_data = cached.read()
+    if os.path.exists(cached_name):
+        with open(cached_name, "r", encoding="utf-8") as cached:
+            page_data = cached.read()
 
-            else:
-                #didn't find the file locally, should we have?
-                assert not file_is_local, cached_name
-                assert url.startswith("https:"), url
+    else:
+        #didn't find the file locally, should we have?
+        assert not file_is_local, cached_name
+        assert url.startswith("https:"), url
 
-                #page_data = urllib.request.urlopen(url).read().decode("utf-8")
-                request = urllib.request.urlopen(url)
-                charset = request.info().get_content_charset("latin-1")
-                page_data = request.read().decode(charset)
-                page_data = page_data.replace(
-                   '<script type="text/javascript" src="https://www.dwiggie.com/phorum/javascript.php?5"></script>',
-                   '')
-                with open(cached_name, "w", encoding="utf-8") as cached:
-                   cached.write(page_data)
+        #page_data = urllib.request.urlopen(url).read().decode("utf-8")
+        request = urllib.request.urlopen(url)
+        charset = request.info().get_content_charset("latin-1")
+        page_data = request.read().decode(charset)
+        page_data = page_data.replace(
+           '<script type="text/javascript" src="https://www.dwiggie.com/phorum/javascript.php?5"></script>',
+           '')
+        with open(cached_name, "w", encoding="utf-8") as cached:
+           cached.write(page_data)
 
-                #print("\t\tDownloaded")
-                time.sleep(2)
-            return page_data
+        print("\t\tDownloaded")
+        time.sleep(2)
+
+    return page_data
 
 def get_post_msg_body(csv_line):
-# Fetch the body of the text from the post file
-# THe extranouse author notes will be stripped in here and
-# any blurb will be returned
+    # Fetch the body of the text from the post file
+    # THe extranouse author notes will be stripped in here and
+    # any blurb will be returned
 
     post_url = csv_line[post_url_index]
     print('\t fetching post url: "{}"'.format(post_url))
-    page_data = get_file(msg_id+".html", False, str(post_url))
+    msg_id = csv_line[msg_id_index]
+
+    # This must be local, because it must have been story_fixed already.
+    # We load the msg_id first
+    page_data = get_file(msg_id+".html", file_is_local=False, url=post_url)
+    page_data = get_file(msg_id+".soup.html", file_is_local=True)
+
     #print("\t page len:", len(page_data))
     #print("\t", page_data[0:40])
 
-    # For now try the simpliest extraction possible from Phorum post file
-    # Look for tags which bracket the story text and Assume template contains only one of these tags!
-
+    # Phorum post files are pre-processed by story-fixer.py
     post_start_text = '<div class="message-body">'
-    post_end_text = '<div class="message-options">'
-    post_start_text_index = page_data.index(post_start_text)
-    post_start_text_index=post_start_text_index+len(post_start_text)
-    post_end_text_index = page_data.index(post_end_text, post_start_text_index)
-    #print("\t source location: ", post_start_text_index, "to", post_end_text_index)
-    assert post_start_text_index and post_end_text_index
+    post_end_text = '</div>'
 
-    message_body = page_data[post_start_text_index: post_end_text_index]
+    assert page_data.startswith(post_start_text)
+    assert page_data.count(post_end_text) == 1
+    assert page_data.endswith(post_end_text)
+
+    message_body = page_data
     #print("\t", "{} characters copied, {:.1f}% of original html".format(len(message_body), 100 * len(message_body) / len(page_data)))
     #print("\t", message_body[11:55], "...", message_body[-30:])
 
     blurb = get_blurb(message_body)
-    post, comment_string = strip_comment(message_body, "DNA:")
-    post, comment_string = strip_comment(message_body, "Author's note", True) #TODO or at least with and without cap N. need to do this caseless?
-                                #found one multiline note with "End Authors note"
-    post, comment_string = strip_comment(message_body, "A/N")
-    # prune any leading BR_TAGs left at head of body after comment stripping.
+
+    post, comment_string = strip_comment(message_body)
+
+    lower = message_body.lower()
+    for trigger in ["a/n", "<dna", "author's note"]:
+        assert trigger not in lower()
+
+    # prune any leading BR_TAGs left at head/tail of body after comment stripping.
     post = post.strip()
-    while post[0:len(BR_TAG)] == BR_TAG:
-        post = post[len(BR_TAG):]
-    #TODO remove from end too so that control the spacing
+    while post.startswith(BR_TAG):
+        post = post[len(BR_TAG):].strip()
+
+    while post.endswith(BR_TAG):
+        post = post[:-len(BR_TAG)].strip()
 
     # Aid in the readability of html files.
     chars_per_line = len(message_body) / (post.count("\n") + 1)
@@ -288,6 +287,7 @@ def get_post_msg_body(csv_line):
         message_body = message_body.replace(BR_TAG, BR_TAG + "\n")
 
     return message_body, blurb
+
 
 COPYRIGHT_PREFIX = '&copy; '        # code assumes these two prefixes are the same length so don't change!
 OLD_COPYRIGHT_PREFIX = "&#169; "
@@ -459,318 +459,333 @@ with open(INPUT_CSV_PATH, encoding='utf-8') as csv_file:
     csv_reader = csv.reader(csv_file)
     csv_input = list(csv_reader)
 
-    print("Archiving Dwiggie posts from: ", INPUT_CSV_PATH);
-    print("Number of rows: {}, number of columns: {}".format(
-        len(csv_input), len(csv_input[0])))
-    print()
+print("Archiving Dwiggie posts from: ", INPUT_CSV_PATH);
+print("Number of rows: {}, number of columns: {}".format(
+    len(csv_input), len(csv_input[0])))
+print()
 
-    header = csv_input.pop(0)
+header = csv_input.pop(0)
 
-    # Join each item in the list with ', ' and print
-    print("Column Headers:")
-    print(", ".join(header))
-    #print()
+# Join each item in the list with ', ' and print
+print("Column Headers:")
+print(", ".join(header))
+#print()
 
-    # verify important column assumptions
-    assert header[post_date_index] == "last_update/Posting"
-    assert header[msg_id_index] == "Msg Id"
-    assert header[author_index] == "author_name"
-    assert header[title_index] == "title_name"
-    assert header[action_index] == "action"
-    assert header[category_index] == "category"
-    assert header[post_url_index] == "new posting - real url"
-    assert header[archive_url_index] == "archive real url"
-    assert header[final_post_index] == "FinalPost?"
-    assert header[which_book_index] == "Book"
-    assert header[blurb_index] == "Blurb"
-    assert header[short_url_index] == "URL"
+# verify important column assumptions
+assert header[post_date_index] == "last_update/Posting"
+assert header[msg_id_index] == "Msg Id"
+assert header[author_index] == "author_name"
+assert header[title_index] == "title_name"
+assert header[action_index] == "action"
+assert header[category_index] == "category"
+assert header[post_url_index] == "new posting - real url"
+assert header[archive_url_index] == "archive real url"
+assert header[final_post_index] == "FinalPost?"
+assert header[which_book_index] == "Book"
+assert header[blurb_index] == "Blurb"
+assert header[short_url_index] == "URL"
 
-    # Remove any extraneous entries at end of list (defined as ones that don't have good looking dates):
-    while not ('200' in csv_input[-1][0] or '199' in csv_input[-1][0]):
-        # remove the last line :)
-        dropped = csv_input.pop()
-        #print("Dropping:", ",".join(dropped))
+# Remove any extraneous entries at end of list (defined as ones that don't have good looking dates):
+while not ('200' in csv_input[-1][0] or '199' in csv_input[-1][0]):
+    # remove the last line :)
+    dropped = csv_input.pop()
+    #print("Dropping:", ",".join(dropped))
 
-    csv_output = {}     # this file goes back to Margaret tracking what has happened
-    csv_output["header"] = header + ["New Filename"]
-    tbd_output = []     # this file will need to be processed by human and then csv_output file manually updated
-    tbd_output.append(header + ["New Filename"])
+csv_output = {}     # this file goes back to Margaret tracking what has happened
+csv_output["header"] = header + ["New Filename"]
+tbd_output = []     # this file will need to be processed by human and then csv_output file manually updated
+tbd_output.append(header + ["New Filename"])
 
-    toAmend = 0
-    archivedNew = 0
-    appendedNew = 0
-    appendedArchive = 0
-    for i, csv_line in enumerate(csv_input):
-        # Verify this line has correct number of columns
-        if len(csv_line) != len(header):
-            print("csv_line is too long {}", len(csv_line))
+# Download all forum messages for story_fixer.py
+for i, csv_line in enumerate(csv_input):
+    assert len(csv_line) == len(header), (len(header), csv_line)
 
-        action = csv_line[action_index]
-        category = csv_line[category_index]    #note that this value could be null
-        msg_id = csv_line[msg_id_index]
-        is_final = csv_line[final_post_index].lower().startswith('y')
+    action = csv_line[action_index]
+    msg_id = csv_line[msg_id_index]
 
-        # archived entries shouldn't have a action:
-        if msg_id != "":
-            assert action != "", (i+2, action)
+    # archived entries shouldn't have a action:
+    if msg_id != "":
+        assert action != "", (i+2, action)
 
-        if action == "":
-            continue
+    if action in ("ArchiveNew", "AppendNew", "AppendArchive"):
+        post_url = csv_line[post_url_index]
+        cache_name = msg_id + ".hmtl"
+        assert get_file(cache_name, False, post_url)
+        print ("\t\tCached {} => {}".format(post_url, cache_name))
 
-        post_date = csv_line[post_date_index]
-        author = csv_line[author_index]
-        temp_title = csv_line[title_index]
-        #title needs to be stripped of any excess verbiage, this assumes that CSV has been groomed to insert '::' at end of simple title
-        title_delimiter = '::'
-        temp_index = temp_title.find(title_delimiter)    # returns -1 if not found
-        if temp_index > 0:
-            title = temp_title[:temp_index]
+
+toAmend = 0
+archivedNew = 0
+appendedNew = 0
+appendedArchive = 0
+for i, csv_line in enumerate(csv_input):
+    # Verify this line has correct number of columns
+    assert len(csv_line) == len(header), (len(header), csv_line)
+
+    action = csv_line[action_index]
+    category = csv_line[category_index]    #note that this value could be null
+    msg_id = csv_line[msg_id_index]
+    is_final = csv_line[final_post_index].lower().startswith('y')
+
+    # archived entries shouldn't have a action:
+    if msg_id != "":
+        assert action != "", (i+2, action)
+
+    if action == "":
+        continue
+
+    post_date = csv_line[post_date_index]
+    author = csv_line[author_index]
+    temp_title = csv_line[title_index]
+    #title needs to be stripped of any excess verbiage, this assumes that CSV has been groomed to insert '::' at end of simple title
+    title_delimiter = '::'
+    temp_index = temp_title.find(title_delimiter)    # returns -1 if not found
+    if temp_index > 0:
+        title = temp_title[:temp_index]
+    else:
+        title = temp_title
+
+    if action == "Amend":
+        post_url = csv_line[post_url_index]
+        page_data = get_file(msg_id + ".html", False, post_url)
+        #NOTE: have no way to know which file (archived or new) is being amended, so let human fetch both the post and archived text
+        #or could groom the csv to include the correct info...
+        print('Amendment({}) - ***** HUMAN INTERVENTION required: "{}"  {} modify file and update CSV'.format(i+2, post_date, title))
+
+        #Save all the data about this story so human can copy it to csv_output when amendment is complete:
+        tbd_line = csv_line[:last_csv_input_index+1] + ["TBD"]     #we don't have a file to modify, human will have to add it.
+        tbd_line[title_index] = title
+        tbd_line[post_date_index] = csv_line[post_date_index]
+        tbd_line[final_post_index] = csv_line[final_post_index]
+        tbd_output.append(tbd_line)
+        toAmend += 1
+        continue
+
+    elif action == "ArchiveNew":
+
+        #if archivedNew >= 2:    # TODO - skip after converting a couple, remove this when done
+        #    continue
+
+        print('ArchiveNew({}): "{}"'.format(i+2, title))
+        message_body, blurb = get_post_msg_body(csv_line)
+        new_filename = format_new_post(
+            title, author,
+            post_date, message_body,
+            is_final)
+
+        #Save all the (new) data about this story (use stripped title) and the file (stripped of it's path name) where the new story resides:
+        assert title not in csv_output
+        if blurb:
+            csv_line[blurb_index] = blurb
         else:
-            title = temp_title
+            if not csv_line[blurb_index]:
+                csv_line[blurb_index] = "tbd"
+        csv_output[title] = csv_line[:last_csv_input_index+1] + [new_filename[len(CACHE_DIRECTORY):]]
+        csv_output[title][title_index] = title
+        csv_output[title][creation_date_index] = csv_line[post_date_index]
+        #print(csv_output[title])
 
-        if action == "Amend":
-            post_url = csv_line[post_url_index]
-            page_data = get_file(msg_id + ".html", False, str(post_url))
-            #NOTE: have no way to know which file (archived or new) is being amended, so let human fetch both the post and archived text
-            #or could groom the csv to include the correct info...
-            print('Amendment({}) - ***** HUMAN INTERVENTION required: "{}"  {} modify file and update CSV'.format(i+2, post_date, title))
+        archivedNew += 1
 
-            #Save all the data about this story so human can copy it to csv_output when amendment is complete:
-            tbd_line = csv_line[:last_csv_input_index+1] + ["TBD"]     #we don't have a file to modify, human will have to add it.
-            tbd_line[title_index] = title
-            tbd_line[post_date_index] = csv_line[post_date_index]
-            tbd_line[final_post_index] = csv_line[final_post_index]
-            tbd_output.append(tbd_line)
-            toAmend += 1
-            continue
+    elif action == "AppendNew":
+         #In this case, we know the format of the file and thus are free to shove stuff into it without care.
 
-        elif (action == "ArchiveNew"):
+        #if appendedNew >= 1:     #TODO - skip after converting a couple, remove this when done
+        #    continue
 
-            #if archivedNew >= 2:    # TODO - skip after converting a couple, remove this when done
-            #    continue
+        print('AppendNew({}): {}'.format(i+2, title))
 
-            print('ArchiveNew({}): "{}"'.format(i+2, title))
-            message_body, blurb = get_post_msg_body(csv_line)
-            new_filename = format_new_post(
-                title, author,
-                post_date, message_body,
-                is_final)
-
-            #Save all the (new) data about this story (use stripped title) and the file (stripped of it's path name) where the new story resides:
-            assert title not in csv_output
-            if blurb:
-                csv_line[blurb_index] = blurb
-            else:
-                if not csv_line[blurb_index]:
-                    csv_line[blurb_index] = "tbd"
-            csv_output[title] = csv_line[:last_csv_input_index+1] + [new_filename[len(CACHE_DIRECTORY):]]
-            csv_output[title][title_index] = title
-            csv_output[title][creation_date_index] = csv_line[post_date_index]
-            #print(csv_output[title])
-
-            archivedNew += 1
-
-        elif action == "AppendNew":
-             #In this case, we know the format of the file and thus are free to shove stuff into it without care.
-
-            #if appendedNew >= 1:     #TODO - skip after converting a couple, remove this when done
-            #    continue
-
-            print('AppendNew({}): {}'.format(i+2, title))
-
-            #fetch post text to append to file created previously during this archive:
-            message_body, blurb = get_post_msg_body(csv_line)
-            if blurb:
-                if csv_line[blurb_index]:
-                    print("\tFOUND NEW BLURB: ")
-                csv_line[blurb_index] = blurb
-
-            #find the relevant file to append to which should now have an entry in the output CSV from previous post
-            if not title in csv_output: # see if it is there caseless and if so, correct current titles to match saved title
-                matches = [csv_output[key] for key in csv_output if str_equal(key, title)]
-                assert len(matches) == 1, (title, matches)
-                title = csv_line[title_index] = matches[0][title_index]
-            assert title, "Appending to non-existent story!"
-            insertion_file = csv_output[title][to_archive_filename_index]
-            page_data = get_file(insertion_file, True)
-
-            print('\t from {} into {}'.format(title, insertion_file))
-
-            # find the insertion point:
-            insertion_index =  page_data.rfind(STORY_INSERTION_MARKER)
-            #print("\t insert location: {} in {} length file".format(insertion_index, len(page_data)))
-            #print("\t", "{} characters copied, {:.1f}% of new file".format(len(message_body), 100 * len(message_body) / len(page_data)))
-            assert insertion_index
-
-            # deal with To Be Continued and The End
-            page_data = change_story_status(page_data, is_final)
-
-            story_data = STORY_TEMPLATE.format(jump_label='', date=post_date, body=message_body,)
-            page_data = page_data.replace(STORY_INSERTION_MARKER,
-                                          story_data + "\n" + STORY_INSERTION_MARKER)
-
-            page_data = update_copyright(page_data, post_date)
-
-
-            output_file = CACHE_DIRECTORY + insertion_file
-            with open(output_file, "w", encoding="utf-8") as output_file:
-                output_file.write(page_data)
-
-            #update any necessary story data
-            csv_output[title][post_date_index] = csv_line[post_date_index]
-            csv_output[title][final_post_index] = csv_line[final_post_index]
-
-            appendedNew += 1
-            continue
-
-        elif action == "AppendArchive":
-
-            #if appendedArchive >= 2:    # TODO - skip after converting a couple, remove this when done
-            #    continue
-
-            print('AppendArchive({}): {}'.format(i+2, title))
-
-            #fetch post text to append to archived file:
-            message_body, blurb = get_post_msg_body(csv_line)
-            if blurb:
+        #fetch post text to append to file created previously during this archive:
+        message_body, blurb = get_post_msg_body(csv_line)
+        if blurb:
+            if csv_line[blurb_index]:
                 print("\tFOUND NEW BLURB: ")
-                csv_line[blurb_index] = blurb
+            csv_line[blurb_index] = blurb
 
-            #Determine the correct associated archive file to fetch - should be first CSV entry with matching title:
-            archive_url = ''
-            for j, test_line in enumerate(csv_input):
-               if str_equal(test_line[title_index], title):
-                   #title alone is insufficient, test author name too but remember that author string isn't always exact match!
-                   if (test_line[author_index] != csv_line[author_index] and
-                           loose_equal(test_line[author_index], csv_line[author_index])):
-                       print("\tERROR: appending with non-matching author names: {} {}):".format(csv_line[author_index], test_line[author_index]))
-                       assert False
-                   archive_url = test_line[archive_url_index]
-                   print('\t Appending to: {}'.format(archive_url))
-                   break
-            assert archive_url
-            #print('Appending({}): ***** ERROR: no archive file for {}'.format(i+2, csv_line[title_index]))
+        #find the relevant file to append to which should now have an entry in the output CSV from previous post
+        if not title in csv_output: # see if it is there caseless and if so, correct current titles to match saved title
+            matches = [csv_output[key] for key in csv_output if str_equal(key, title)]
+            assert len(matches) == 1, (title, matches)
+            title = csv_line[title_index] = matches[0][title_index]
+        assert title, "Appending to non-existent story!"
+        insertion_file = csv_output[title][to_archive_filename_index]
+        page_data = get_file(insertion_file, True)
 
-            # find the insertion file, going to hope they all have same basic format at end!
-            # Note: because the local cache is searched first, multiple calls to append archive will magically work correctly!
-            start_indx = archive_url.rfind("/")
-            insertion_filename = archive_url[start_indx:]
-            page_data = get_file(insertion_filename, False, archive_url)
-            page_data = ensure_new_story_format(page_data)
+        print('\t from {} into {}'.format(title, insertion_file))
 
-            #TODO: this is temp code to make styles look correct in local work, remove before done:
-            page_data = page_data.replace('/style/stories.css', 'style/stories.css')
-            page_data = page_data.replace('/derby/back.gif', 'derby/back.gif')
+        # find the insertion point:
+        insertion_index =  page_data.rfind(STORY_INSERTION_MARKER)
+        #print("\t insert location: {} in {} length file".format(insertion_index, len(page_data)))
+        #print("\t", "{} characters copied, {:.1f}% of new file".format(len(message_body), 100 * len(message_body) / len(page_data)))
+        assert insertion_index
 
-            charset_info = page_data.find('<meta charset="utf-8">')
-            if charset_info < 0:
-                page_data = page_data.replace('<head>', '<head>\n <meta charset="utf-8"> \n')
+        # deal with To Be Continued and The End
+        page_data = change_story_status(page_data, is_final)
 
-            #search for and remove deprecated author addrs: <!--mailto: apterja@optusnet.com.au -->
-            start_index = page_data.find('<!--mailto:')
-            if start_index >=0:
-                end_index = page_data.find('-->', start_index)
-                author_str = page_data[start_index:end_index+3]
-                #print('\t REMOVED: ' + author_str)
-                page_data = page_data.replace(author_str, '')
+        story_data = STORY_TEMPLATE.format(jump_label='', date=post_date, body=message_body,)
+        page_data = page_data.replace(STORY_INSERTION_MARKER,
+                                      story_data + "\n" + STORY_INSERTION_MARKER)
 
-            #insert the jump links first:
-            jump_string_date = datetime.datetime.strptime(post_date, "%Y-%m-%d")
-            jump_string_date_str = jump_string_date.strftime('%A %B %d, %Y')
-            jump_string = '\n<a href="#new{}">Jump to new as of {}</a><br />'.format(
-                csv_line[post_date_index], jump_string_date_str)
+        page_data = update_copyright(page_data, post_date)
 
-            jump_label = '<a id="new{}"></a>'.format(post_date)
 
-            assert JUMP_LINK_INSERTION_MARKER in page_data, "should have been tested"
-            assert STORY_INSERTION_MARKER in page_data, "see above line"
+        output_file = CACHE_DIRECTORY + insertion_file
+        with open(output_file, "w", encoding="utf-8") as output_file:
+            output_file.write(page_data)
 
-            # TODO this needs to be toggled off for code testings
-            if jump_string in page_data and jump_label in page_data:
-                print("\tAppend already performed (already found {})".format(jump_label))
-                continue
+        #update any necessary story data
+        csv_output[title][post_date_index] = csv_line[post_date_index]
+        csv_output[title][final_post_index] = csv_line[final_post_index]
 
-            # remove any closing from existing file and append correct status to end of new:
-            #TODO ensure that this works correctly for both this and append to new stories.
-            page_data = change_story_status(page_data, is_final)
+        appendedNew += 1
+        continue
 
-            insertion_index =  page_data.index(STORY_INSERTION_MARKER)
-            #print("\t insert location: {} in {} length file ({} from end)".format(
-            #    insertion_index, len(page_data), insertion_index - len(page_data)))
-            #print("\t {} characters copied, {:.1f}% of new file".format(
-            #    len(message_body), 100 * len(message_body) / len(page_data)))
-            assert insertion_index and insertion_index > (len(page_data)- FINAL_SECTION_LENGTH_MAX)
+    elif action == "AppendArchive":
 
-            story_data = STORY_TEMPLATE.format(
-                jump_label=jump_label + "\n",
-                date=post_date,
-                body=message_body)
+        #if appendedArchive >= 2:    # TODO - skip after converting a couple, remove this when done
+        #    continue
 
-            new_page_data = (page_data
-                .replace(JUMP_LINK_INSERTION_MARKER, jump_string + "\n" + JUMP_LINK_INSERTION_MARKER)
-                .replace(STORY_INSERTION_MARKER, story_data + "\n" +  STORY_INSERTION_MARKER)
-            )
+        print('AppendArchive({}): {}'.format(i+2, title))
 
-            new_page_data = update_copyright(new_page_data, post_date)
+        #fetch post text to append to archived file:
+        message_body, blurb = get_post_msg_body(csv_line)
+        if blurb:
+            print("\tFOUND NEW BLURB: ")
+            csv_line[blurb_index] = blurb
 
-            output_file = CACHE_DIRECTORY + insertion_filename
-            with open(output_file, "w", encoding="utf-8") as output_file:
-                output_file.write(new_page_data)
+        #Determine the correct associated archive file to fetch - should be first CSV entry with matching title:
+        archive_url = ''
+        for j, test_line in enumerate(csv_input):
+           if str_equal(test_line[title_index], title):
+               #title alone is insufficient, test author name too but remember that author string isn't always exact match!
+               if (test_line[author_index] != csv_line[author_index] and
+                       loose_equal(test_line[author_index], csv_line[author_index])):
+                   print("\tERROR: appending with non-matching author names: {} {}):".format(csv_line[author_index], test_line[author_index]))
+                   assert False
+               archive_url = test_line[archive_url_index]
+               print('\t Appending to: {}'.format(archive_url))
+               break
+        assert archive_url
+        #print('Appending({}): ***** ERROR: no archive file for {}'.format(i+2, csv_line[title_index]))
 
-            if title not in csv_output:     # start with the archived story data
-                #print('\tAdding title to csv output', title)
-                csv_output[title] = test_line[:last_csv_input_index+1] + [insertion_filename]
-                csv_output[title][action_index] = csv_line[action_index]
-                csv_output[title][category_index] = csv_line[category_index]
-            csv_output[title][post_date_index] = csv_line[post_date_index]
-            csv_output[title][final_post_index] = csv_line[final_post_index]
+        # find the insertion file, going to hope they all have same basic format at end!
+        # Note: because the local cache is searched first, multiple calls to append archive will magically work correctly!
+        start_indx = archive_url.rfind("/")
+        insertion_filename = archive_url[start_indx:]
+        page_data = get_file(insertion_filename, False, archive_url)
+        page_data = ensure_new_story_format(page_data)
 
-            appendedArchive += 1
+        #TODO: this is temp code to make styles look correct in local work, remove before done:
+        page_data = page_data.replace('/style/stories.css', 'style/stories.css')
+        page_data = page_data.replace('/derby/back.gif', 'derby/back.gif')
+
+        charset_info = page_data.find('<meta charset="utf-8">')
+        if charset_info < 0:
+            page_data = page_data.replace('<head>', '<head>\n <meta charset="utf-8"> \n')
+
+        #search for and remove deprecated author addrs: <!--mailto: apterja@optusnet.com.au -->
+        start_index = page_data.find('<!--mailto:')
+        if start_index >=0:
+            end_index = page_data.find('-->', start_index)
+            author_str = page_data[start_index:end_index+3]
+            #print('\t REMOVED: ' + author_str)
+            page_data = page_data.replace(author_str, '')
+
+        #insert the jump links first:
+        jump_string_date = datetime.datetime.strptime(post_date, "%Y-%m-%d")
+        jump_string_date_str = jump_string_date.strftime('%A %B %d, %Y')
+        jump_string = '\n<a href="#new{}">Jump to new as of {}</a><br />'.format(
+            csv_line[post_date_index], jump_string_date_str)
+
+        jump_label = '<a id="new{}"></a>'.format(post_date)
+
+        assert JUMP_LINK_INSERTION_MARKER in page_data, "should have been tested"
+        assert STORY_INSERTION_MARKER in page_data, "see above line"
+
+        # TODO this needs to be toggled off for code testings
+        if jump_string in page_data and jump_label in page_data:
+            print("\tAppend already performed (already found {})".format(jump_label))
             continue
 
-        elif action == "no-op":
-            #these are extraneous posts, ignore here, let them archive in forum
-            #TODO: return this statement for final run: print('No-op({}): "{}" by {}'.format(i+2, title, author))
-            #csv_output[title] = csv_line[:last_csv_input_index+1] + ['']
-            continue
-        elif action == "delete":
-            #garbage post that is ignored here and deleted from forum
-            #print('Delete this post({}): "{}" by {}'.format(i+2, title, author))
-            #csv_output[title] = csv_line[:last_csv_input_index+1] + ['']
-            continue
-        elif action == "dna":
-            #Do Not Archive, so, duh, do nothing here, do they get removed from forum archive?
-            #print('DNA this post({}): "{}" by {}'.format(i+2, title, author))
-            #csv_output[title] = csv_line[:last_csv_input_index+1] + ['']
-            continue
-        else:
-            print("unhandled action:", action)
+        # remove any closing from existing file and append correct status to end of new:
+        #TODO ensure that this works correctly for both this and append to new stories.
+        page_data = change_story_status(page_data, is_final)
 
-    # Quick validation that each key appears only once in csv_output
-    key_counts = Counter([key.lower() for key in csv_output.keys()])
-    for key, count in key_counts.most_common():
-        if count > 1:
-            print ("**ERROR** Title duplicated in csv:",
-                   [dupe for dupe in csv_output.keys() if str_equal(key, dupe)])
-            assert False
+        insertion_index =  page_data.index(STORY_INSERTION_MARKER)
+        #print("\t insert location: {} in {} length file ({} from end)".format(
+        #    insertion_index, len(page_data), insertion_index - len(page_data)))
+        #print("\t {} characters copied, {:.1f}% of new file".format(
+        #    len(message_body), 100 * len(message_body) / len(page_data)))
+        assert insertion_index and insertion_index > (len(page_data)- FINAL_SECTION_LENGTH_MAX)
 
-    try:
-        with open(OUTPUT_CSV_PATH, "w", newline='') as csv_file:
-           writer = csv.writer(csv_file)
-           writer.writerows(csv_output.values())
+        story_data = STORY_TEMPLATE.format(
+            jump_label=jump_label + "\n",
+            date=post_date,
+            body=message_body)
 
-        with open(OUTPUT_CSV_PATH + '.tbd', "w", newline='') as tbd_file:
-           writer = csv.writer(tbd_file)
-           writer.writerows(tbd_output)
+        new_page_data = (page_data
+            .replace(JUMP_LINK_INSERTION_MARKER, jump_string + "\n" + JUMP_LINK_INSERTION_MARKER)
+            .replace(STORY_INSERTION_MARKER, story_data + "\n" +  STORY_INSERTION_MARKER)
+        )
+
+        new_page_data = update_copyright(new_page_data, post_date)
+
+        output_file = CACHE_DIRECTORY + insertion_filename
+        with open(output_file, "w", encoding="utf-8") as output_file:
+            output_file.write(new_page_data)
+
+        if title not in csv_output:     # start with the archived story data
+            #print('\tAdding title to csv output', title)
+            csv_output[title] = test_line[:last_csv_input_index+1] + [insertion_filename]
+            csv_output[title][action_index] = csv_line[action_index]
+            csv_output[title][category_index] = csv_line[category_index]
+        csv_output[title][post_date_index] = csv_line[post_date_index]
+        csv_output[title][final_post_index] = csv_line[final_post_index]
+
+        appendedArchive += 1
+        continue
+
+    elif action == "no-op":
+        #these are extraneous posts, ignore here, let them archive in forum
+        #TODO: return this statement for final run: print('No-op({}): "{}" by {}'.format(i+2, title, author))
+        #csv_output[title] = csv_line[:last_csv_input_index+1] + ['']
+        continue
+    elif action == "delete":
+        #garbage post that is ignored here and deleted from forum
+        #print('Delete this post({}): "{}" by {}'.format(i+2, title, author))
+        #csv_output[title] = csv_line[:last_csv_input_index+1] + ['']
+        continue
+    elif action == "dna":
+        #Do Not Archive, so, duh, do nothing here, do they get removed from forum archive?
+        #print('DNA this post({}): "{}" by {}'.format(i+2, title, author))
+        #csv_output[title] = csv_line[:last_csv_input_index+1] + ['']
+        continue
+    else:
+        print("unhandled action:", action)
+
+# Quick validation that each key appears only once in csv_output
+key_counts = Counter([key.lower() for key in csv_output.keys()])
+for key, count in key_counts.most_common():
+    if count > 1:
+        print ("**ERROR** Title duplicated in csv:",
+               [dupe for dupe in csv_output.keys() if str_equal(key, dupe)])
+        assert False
+
+try:
+    with open(OUTPUT_CSV_PATH, "w", newline='') as csv_file:
+       writer = csv.writer(csv_file)
+       writer.writerows(csv_output.values())
+
+    with open(OUTPUT_CSV_PATH + '.tbd', "w", newline='') as tbd_file:
+       writer = csv.writer(tbd_file)
+       writer.writerows(tbd_output)
 
 
-    except IOError:
-        print("I/O error")
+except IOError:
+    print("I/O error")
 
-    print('Archive complete: \n\t{} story files created\n\t\ \
-                {} Amendments must be completed manually (see log or CSV file)\n\t \
-                {} New Stories (with {} Updates to those)\n\t \
-                {} Archive Updates ({} stories)'.format(len(csv_output)-1, toAmend, archivedNew, appendedNew, \
-                                                         appendedArchive, (len(csv_output)-1-archivedNew)))
-
-    csv_file.close()
+print('Archive complete: \n\t{} story files created\n\t\ \
+            {} Amendments must be completed manually (see log or CSV file)\n\t \
+            {} New Stories (with {} Updates to those)\n\t \
+            {} Archive Updates ({} stories)'.format(len(csv_output)-1, toAmend, archivedNew, appendedNew, \
+                                                     appendedArchive, (len(csv_output)-1-archivedNew)))

@@ -25,8 +25,6 @@ def get_changes(file_path, file_data):
 
     # remove message options from bottom of post
     body.find(class_="message-options").extract()
-
-    new_path = file_path.replace(".html", ".soup.orig.html")
     print("Done with this file! Saving as", new_path)
     save_html(new_path, body)
 
