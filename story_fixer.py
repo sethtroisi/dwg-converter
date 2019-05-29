@@ -13,10 +13,10 @@ ANCHOR_FINDER = re.compile('<a *name="*([a-z0-9-]*)"* *\?>')
 
 def save_html(file_path, soup):
     with open(file_path, "w") as file:
-        file.write(str(soup).replace("<br />", )
+        file.write(str(soup))
 
 def get_changes(file_path, file_data):
-    # TODO verify that soup doesn't change message body to dramatically
+    # TODO verify that soup doesn't change message body too dramatically.
     soup = BeautifulSoup(file_data, "html.parser")
 
     bodies = soup.find_all(class_="message-body")
@@ -25,6 +25,10 @@ def get_changes(file_path, file_data):
 
     # remove message options from bottom of post
     body.find(class_="message-options").extract()
+
+    new_path = file_path.replace(".html", ".soup.orig.html")
+    print("Done with this file! Saving as", new_path)
+    save_html(new_path, body)
 
     file_actions = []
 
@@ -56,10 +60,9 @@ def get_changes(file_path, file_data):
     while True:
         action = input("drq|<line>|<line>-<line>: ").lower()
         if action == "d":
-            print("Done with this file!")
-            save_html(
-                file_path.replace(".html", ".soup.html"),
-                body)
+            new_path = file_path.replace(".html", ".soup.html")
+            print("Done with this file! Saving as", new_path)
+            save_html(new_path, body)
             return file_actions, str(body)
         elif action == "r":
             print("Reverting and restarting")
@@ -76,15 +79,26 @@ def get_changes(file_path, file_data):
 
         groups = list(valid_action.groups())
         if groups[1] is None:
-            groups = [groups[0], groups[0]]
+            groups[1] = groups[0]
 
-        groups = list(map(int, groups))
-        first, last = groups
+        first, last = list(map(int, groups))
+
+        dna_tag = soup.new_tag("DNA")
 
         for c in range(first, last+1):
-            node = children[c].extract()
-            file_actions.append(("d", str(node)))
-            print("Deleting:", str(node)[:60])
+            node = children[c]
+
+            if c == first:
+                # replace child in doc with empty AUTHOR_NOTE tag.
+                node.replace_with(dna_tag)
+            else:
+                node.extract()
+
+            # place child inside dna tag.
+            dna_tag.append(node)
+
+            file_actions.append(((first, last), str(node)))
+            print("Archiving:", str(node)[:60])
 
 
 #-------------------
@@ -118,8 +132,7 @@ for fn in os.listdir(TO_FIX_DIR):
         if file_actions == "QUIT":
             break
 
-
-        fixes[fn] = file_actions
+        fixes[fn] = (file_actions)
 
 # Save changes
 with open(STORY_FIXES, "w") as fixes_file:
