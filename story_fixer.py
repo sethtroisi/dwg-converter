@@ -2,6 +2,7 @@ import json
 import os
 import re
 
+
 from bs4 import BeautifulSoup
 
 import subprocess
@@ -12,7 +13,7 @@ import subprocess
 ANCHOR_FINDER = re.compile('<a *name="*([a-z0-9-]*)"* *\?>')
 
 def save_html(file_path, soup):
-    with open(file_path, "w") as file:
+    with open(file_path, "w", encoding="utf-8") as file:
         file.write(str(soup))
 
 def get_changes(file_path, file_data):
@@ -23,7 +24,11 @@ def get_changes(file_path, file_data):
     assert len(bodies) == 1, len(bodies)
     body = bodies[0]
 
+    #temp:
+    #import pdb; pdb.set_trace()
+
     # remove message options from bottom of post
+    #TODO - need to catch errors here due to "bad" html
     body.find(class_="message-options").extract()
 
     file_actions = []
@@ -57,7 +62,8 @@ def get_changes(file_path, file_data):
         action = input("drq|<line>|<line>-<line>: ").lower()
         if action == "d":
             new_path = file_path.replace(".html", ".soup.html")
-            print("Done with this file! Saving as", new_path)
+            #print("Done with this file! Saving as", new_path)
+            print("Done with this file! *****************************************")
             save_html(new_path, body)
             return file_actions, str(body)
         elif action == "r":
@@ -94,7 +100,7 @@ def get_changes(file_path, file_data):
             dna_tag.append(node)
 
             file_actions.append(((first, last), str(node)))
-            print("Archiving:", str(node)[:60])
+            print("Encapsulating:", str(node)[:60])
 
 
 #-------------------
@@ -105,13 +111,26 @@ POST_REGEX = r'^[0-9]+.html$'
 STORY_FIXES = "story_fixes.json"
 
 # TODO(brenda): restore and ignore stories in story_fixes.json
+# what does this comment mean? to skip over ones already processed?
 
 # story to node text deleted
 fixes = {}
 
 for fn in sorted(os.listdir(TO_FIX_DIR)):
+
+    #TODO TEMP To determine error:
+    #if fn != '126607.html':
+    #   continue
+    
     if re.match(POST_REGEX, fn):
         file_path = TO_FIX_DIR + "/" + fn
+        
+        #assume any exisiting file is already processed and skip it:
+        soup_path = file_path.replace(".html", ".soup.html")
+        if os.path.exists(soup_path):
+            print(file_path + " already processed")
+            continue
+        
         with open(file_path, encoding="utf-8") as forum_file:
             data = forum_file.read()
 
@@ -123,7 +142,7 @@ for fn in sorted(os.listdir(TO_FIX_DIR)):
 
         while file_actions == new_data == None:
             # revert: retry
-            file_actions, new_data = get_changes(data)
+            file_actions, new_data = get_changes(file_path, data)
 
         if file_actions == "QUIT":
             break
