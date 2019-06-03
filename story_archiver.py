@@ -117,7 +117,7 @@ def strip_comment(post):
     #      original post.
 
     soup = BeautifulSoup(post, "html.parser")
-    DNAs = soup.find_all("DNA")
+    DNAs = soup.find_all("dna")
 
     blurbs = []
 
@@ -125,7 +125,7 @@ def strip_comment(post):
         raw_dna = str(dna)
         # Soup often transforms html but shouldn't have here.
         assert raw_dna in post, (dna, raw_dna)
-        post = post.replace(raw, "", 1)
+        post = post.replace(raw_dna, "", 1)
 
         print('\t REMOVED: "{}"'.format(dna.text))
         blurbs.append(dna.text)
@@ -249,7 +249,11 @@ def get_post_msg_body(csv_line):
     # This must be local, because it must have been story_fixed already.
     # if not present run + story fixer: get_file(msg_id+".html", False, post_url)
     page_data = get_file(msg_id+".soup.html", file_is_local=True)
-    page_data = page_data.strip()
+    # Fix an error by seth where tags must be lowercase.
+    page_data = (page_data
+        .replace('<DNA>', '<dna>')
+        .replace('</DNA>', '</dna>')
+        .strip())
 
     #print("\t page len:", len(page_data))
     #print("\t", page_data[0:40])
@@ -266,11 +270,11 @@ def get_post_msg_body(csv_line):
 
     post, comment_string = strip_comment(page_data)
 
-    lower = page_data.lower()
+    lower = post.lower()
     for trigger in ["a/n", "<dna", "author's note"]:
         #TODO: the following generates a type error:
-        # assert trigger not in lower()
-        continue
+        # assert trigger not in lower
+        pass
 
     # prune any leading BR_TAGs left at head/tail of body after comment stripping.
     post = post.strip()
@@ -281,12 +285,12 @@ def get_post_msg_body(csv_line):
         post = post[:-len(BR_TAG)].strip()
 
     # Aid in the readability of html files.
-    chars_per_line = len(page_data) / (post.count("\n") + 1)
+    chars_per_line = len(post) / (post.count("\n") + 1)
     if chars_per_line > 500:
         # Add artificial newlins to the post in the html file
-        page_data = page_data.replace(BR_TAG, BR_TAG + "\n")
+        post = post.replace(BR_TAG, BR_TAG + "\n")
 
-    return page_data, blurb
+    return post, blurb
 
 
 COPYRIGHT_PREFIX = '&copy; '        # code assumes these two prefixes are the same length so don't change!
@@ -496,8 +500,7 @@ csv_output["header"] = header + ["New Filename"]
 tbd_output = []     # this file will need to be processed by human and then csv_output file manually updated
 tbd_output.append(header + ["New Filename"])
 
-#TODO: let's omit this for now:
-if True:
+if False:
     # Download all forum messages for story_fixer.py
     for i, csv_line in enumerate(csv_input):
         assert len(csv_line) == len(header), (len(header), csv_line)

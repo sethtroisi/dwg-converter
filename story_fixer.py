@@ -85,7 +85,7 @@ def get_changes(file_path, file_data):
 
         first, last = list(map(int, groups))
 
-        dna_tag = soup.new_tag("DNA")
+        dna_tag = soup.new_tag("dna")
 
         for c in range(first, last+1):
             node = children[c]
