@@ -12,6 +12,8 @@ from bs4 import BeautifulSoup
 
 #-----------------------
 
+ONLY_A_FEW = False
+
 INPUT_CSV_PATH = "dwg-posts.csv"
 OUTPUT_CSV_PATH="dwg_archive_results.csv"
 
@@ -109,7 +111,7 @@ def create_filename(author, title, post_date):
     filename = "cache/" + author[:10] + title[:15] + post_date + ".html"
     return(filename)
 
-def strip_comment(post):
+def strip_comment(post, fn):
     # Using story_fixer.py
     #Brenda Question: WHAT is going on in here? and will blurbs be found if not inside DNA? I'm thinking not...
     #Seth: I load the post into BeautifulSoup so that I can easily find all the <DNA> tags. then I grab
@@ -121,14 +123,19 @@ def strip_comment(post):
 
     blurbs = []
 
+    # Needed in the case that <dna> contains another dna.
+    original = post
+
     for dna in DNAs:
         raw_dna = str(dna)
         # Soup often transforms html but shouldn't have here.
-        assert raw_dna in post, (dna, raw_dna)
-        post = post.replace(raw_dna, "", 1)
+        assert raw_dna in original, (fn, dna)
 
-        print('\t REMOVED: "{}"'.format(dna.text))
-        blurbs.append(dna.text)
+        if raw_dna in post:
+            post = post.replace(raw_dna, "", 1)
+
+            print('\t REMOVED: "{}"'.format(dna.text))
+            blurbs.append(dna.text)
 
     return post, " | ".join(blurbs)
 
@@ -245,6 +252,7 @@ def get_post_msg_body(csv_line):
     post_url = csv_line[post_url_index]
     print('\t fetching post url: "{}"'.format(post_url))
     msg_id = csv_line[msg_id_index]
+    title = csv_line[title_index]
 
     # This must be local, because it must have been story_fixed already.
     # if not present run + story fixer: get_file(msg_id+".html", False, post_url)
@@ -268,7 +276,7 @@ def get_post_msg_body(csv_line):
 
     blurb = get_blurb(page_data)
 
-    post, comment_string = strip_comment(page_data)
+    post, comment_string = strip_comment(page_data, msg_id)
 
     lower = post.lower()
     for trigger in ["a/n", "<dna", "author's note"]:
@@ -563,8 +571,8 @@ for i, csv_line in enumerate(csv_input):
 
     elif action == "ArchiveNew":
 
-        #if archivedNew >= 2:    # TODO - skip after converting a couple, remove this when done
-        #    continue
+        if ONLY_A_FEW and archivedNew >= 2:
+            continue
 
         print('ArchiveNew({}): "{}"'.format(i+2, title))
         message_body, blurb = get_post_msg_body(csv_line)
@@ -592,8 +600,8 @@ for i, csv_line in enumerate(csv_input):
     elif action == "AppendNew":
          #In this case, we know the format of the file and thus are free to shove stuff into it without care.
 
-        #if appendedNew >= 1:     #TODO - skip after converting a couple, remove this when done
-        #    continue
+        if ONLY_A_FEW and appendedNew >= 1:
+            continue
 
         print('AppendNew({}): {}'.format(i+2, title))
 
@@ -645,8 +653,8 @@ for i, csv_line in enumerate(csv_input):
 
     elif action == "AppendArchive":
 
-        #if appendedArchive >= 2:    # TODO - skip after converting a couple, remove this when done
-        #    continue
+        if ONLY_A_FEW and appendedArchive >= 2:
+            continue
 
         print('AppendArchive({}): {}'.format(i+2, title))
 
