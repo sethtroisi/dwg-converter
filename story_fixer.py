@@ -108,29 +108,21 @@ def get_changes(file_path, file_data):
 TO_FIX_DIR = "cache/"
 POST_REGEX = r'^[0-9]+.html$'
 
-STORY_FIXES = "story_fixes.json"
-
-# TODO(brenda): restore and ignore stories in story_fixes.json
-# what does this comment mean? to skip over ones already processed?
-
-# story to node text deleted
-fixes = {}
-
 for fn in sorted(os.listdir(TO_FIX_DIR)):
 
     #TODO TEMP To determine error:
     #if fn != '126607.html':
     #   continue
-    
+
     if re.match(POST_REGEX, fn):
         file_path = TO_FIX_DIR + "/" + fn
-        
+
         #assume any exisiting file is already processed and skip it:
         soup_path = file_path.replace(".html", ".soup.html")
         if os.path.exists(soup_path):
             print(file_path + " already processed")
             continue
-        
+
         with open(file_path, encoding="utf-8") as forum_file:
             data = forum_file.read()
 
@@ -146,9 +138,3 @@ for fn in sorted(os.listdir(TO_FIX_DIR)):
 
         if file_actions == "QUIT":
             break
-
-        fixes[fn] = (file_actions)
-
-# Save changes
-with open(STORY_FIXES, "w") as fixes_file:
-    json.dump(fixes, fixes_file)

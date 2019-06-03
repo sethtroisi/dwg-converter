@@ -152,9 +152,9 @@ def find_keyword_string (post, keyword, caseless = False):
 def get_blurb(post):
     # Remove (replace with empty) anything that looks like <b> <i> open or close (</b>) tag.
     # Should we do a more general replace of anything in <>?
-    local_post = re.subn(
-        r'</* *[bi] *>', ''
-        post.lower()).strip());
+    local_post = re.sub(
+        r'</* *[bi] *>', '',
+        post.lower()).strip()
 
     blurb = find_keyword_string(local_post, "Blurb:", True)
     if not blurb:
@@ -249,6 +249,7 @@ def get_post_msg_body(csv_line):
     # This must be local, because it must have been story_fixed already.
     # if not present run + story fixer: get_file(msg_id+".html", False, post_url)
     page_data = get_file(msg_id+".soup.html", file_is_local=True)
+    page_data = page_data.strip()
 
     #print("\t page len:", len(page_data))
     #print("\t", page_data[0:40])
@@ -258,19 +259,14 @@ def get_post_msg_body(csv_line):
     post_end_text = '</div>'
 
     assert page_data.startswith(post_start_text)
-    assert page_data.count(post_end_text) == 1
-    assert page_data.endswith(post_end_text)
+    assert page_data.count(post_end_text) >= 1
+    assert page_data.endswith(post_end_text), (page_data[-100:],)
 
-    #TOO why do you do this copy?
-    message_body = page_data
-    #print("\t", "{} characters copied, {:.1f}% of original html".format(len(message_body), 100 * len(message_body) / len(page_data)))
-    #print("\t", message_body[11:55], "...", message_body[-30:])
+    blurb = get_blurb(page_data)
 
-    blurb = get_blurb(message_body)
+    post, comment_string = strip_comment(page_data)
 
-    post, comment_string = strip_comment(message_body)
-
-    lower = message_body.lower()
+    lower = page_data.lower()
     for trigger in ["a/n", "<dna", "author's note"]:
         #TODO: the following generates a type error:
         # assert trigger not in lower()
@@ -285,12 +281,12 @@ def get_post_msg_body(csv_line):
         post = post[:-len(BR_TAG)].strip()
 
     # Aid in the readability of html files.
-    chars_per_line = len(message_body) / (post.count("\n") + 1)
+    chars_per_line = len(page_data) / (post.count("\n") + 1)
     if chars_per_line > 500:
         # Add artificial newlins to the post in the html file
-        message_body = message_body.replace(BR_TAG, BR_TAG + "\n")
+        page_data = page_data.replace(BR_TAG, BR_TAG + "\n")
 
-    return message_body, blurb
+    return page_data, blurb
 
 
 COPYRIGHT_PREFIX = '&copy; '        # code assumes these two prefixes are the same length so don't change!
@@ -501,24 +497,19 @@ tbd_output = []     # this file will need to be processed by human and then csv_
 tbd_output.append(header + ["New Filename"])
 
 #TODO: let's omit this for now:
-'''
-# Download all forum messages for story_fixer.py
-for i, csv_line in enumerate(csv_input):
-    assert len(csv_line) == len(header), (len(header), csv_line)
+if True:
+    # Download all forum messages for story_fixer.py
+    for i, csv_line in enumerate(csv_input):
+        assert len(csv_line) == len(header), (len(header), csv_line)
 
-    action = csv_line[action_index]
-    msg_id = csv_line[msg_id_index]
+        action = csv_line[action_index]
+        msg_id = csv_line[msg_id_index]
 
-    # archived entries shouldn't have a action:
-    if msg_id != "":
-        assert action != "", (i+2, action)
-
-    if action in ("Amend", "ArchiveNew", "AppendNew", "AppendArchive"):
-        post_url = csv_line[post_url_index]
-        cache_name = msg_id + ".html"
-        assert get_file(cache_name, False, post_url)
-        print ("\t\tCached {} => {}".format(post_url, cache_name))
-'''
+        if action in ("Amend", "ArchiveNew", "AppendNew", "AppendArchive"):
+            post_url = csv_line[post_url_index]
+            cache_name = msg_id + ".html"
+            assert get_file(cache_name, False, post_url)
+            print ("\t\tCached {} => {}".format(post_url, cache_name))
 
 toAmend = 0
 archivedNew = 0
@@ -533,8 +524,7 @@ for i, csv_line in enumerate(csv_input):
     msg_id = csv_line[msg_id_index]
     is_final = csv_line[final_post_index].lower().startswith('y')
 
-    # archived entries shouldn't have a action:
-    #TODO: why is this duplicated here? should we verify that old entries don't have an action?
+    # Archived entries shouldn't have a action:
     if msg_id != "":
         assert action != "", (i+2, action)
 
@@ -580,13 +570,15 @@ for i, csv_line in enumerate(csv_input):
             post_date, message_body,
             is_final)
 
+        assert title not in csv_output or csv_output[title][action_index] == 'dna', (title, csv_output[title])
+
         #Save all the (new) data about this story (use stripped title) and the file (stripped of it's path name) where the new story resides:
-        assert title not in csv_output
         if blurb:
             csv_line[blurb_index] = blurb
         else:
             if not csv_line[blurb_index]:
                 csv_line[blurb_index] = "tbd"
+
         csv_output[title] = csv_line[:last_csv_input_index+1] + [new_filename[len(CACHE_DIRECTORY):]]
         csv_output[title][title_index] = title
         csv_output[title][creation_date_index] = csv_line[post_date_index]
@@ -757,17 +749,20 @@ for i, csv_line in enumerate(csv_input):
         #these are extraneous posts, ignore here, let them archive in forum
         #TODO: return this statement for final run:
         print('No-op({}): "{}" by {}'.format(i+2, title, author))
-        csv_output[title] = csv_line[:last_csv_input_index+1] + ['']
+        if title not in csv_output:
+            csv_output[title] = csv_line[:last_csv_input_index+1] + ['']
         continue
     elif action == "delete":
         #garbage post that is ignored here and deleted from forum
         print('Delete this post({}): "{}" by {}'.format(i+2, title, author))
-        csv_output[title] = csv_line[:last_csv_input_index+1] + ['']
+        if title not in csv_output:
+            csv_output[title] = csv_line[:last_csv_input_index+1] + ['']
         continue
     elif action == "dna":
         #Do Not Archive, so, duh, do nothing here, do they get removed from forum archive?
         print('DNA this post({}): "{}" by {}'.format(i+2, title, author))
-        csv_output[title] = csv_line[:last_csv_input_index+1] + ['']
+        if title not in csv_output:
+            csv_output[title] = csv_line[:last_csv_input_index+1] + ['']
         continue
     else:
         print("unhandled action:", action)
