@@ -112,16 +112,14 @@ def create_filename(author, title, post_date):
     return(filename)
 
 def strip_comment(post, fn):
-    # Using story_fixer.py
-    #Brenda Question: WHAT is going on in here? and will blurbs be found if not inside DNA? I'm thinking not...
-    #Seth: I load the post into BeautifulSoup so that I can easily find all the <DNA> tags. then I grab
-    #      the text of each (making sure it wasn't changed when soup did cleanups) and remove it from the
-    #      original post.
+    # Run this after Using story_fixer.py which will embed each DNA section in a DNA tag
+    # This strips the text of each of those tagged sections (ensuring it wasn't changed when soup did cleanups)
+    # from the post and returns that purged post and the purged sections.
 
     soup = BeautifulSoup(post, "html.parser")
     DNAs = soup.find_all("dna")
 
-    blurbs = []
+    purged = []
 
     # Needed in the case that <dna> contains another dna.
     original = post
@@ -135,9 +133,9 @@ def strip_comment(post, fn):
             post = post.replace(raw_dna, "", 1)
 
             print('\t REMOVED: "{}"'.format(dna.text))
-            blurbs.append(dna.text)
+            purged.append(dna.text)
 
-    return post, " | ".join(blurbs)
+    return post, " | ".join(purged)
 
 
 def find_keyword_string (post, keyword, caseless = False):
@@ -166,12 +164,14 @@ def get_blurb(post):
     blurb = find_keyword_string(local_post, "Blurb:", True)
     if not blurb:
         blurb = find_keyword_string(local_post, "Blurb", True)
-# TODO: some authors use summary for the blurb, unfortunately, others use summary on subsequent posts to summarize situation so far...
-#   so really can use summary only if don't already  have a blurb and we don't know that here.
+# TODO: some authors use summary for the blurb,
+#   unfortunately, others use summary on subsequent posts to summarize situation so far...
+#   so really can use "summary" only if don't already  have a blurb and we don't know that here.
 #   if not blurb:
 #       blurb = find_keyword_string(local_post, "Summary:", True)
 #    if not blurb:
-#        blurb = find_keyword_string(local_post, "Summary", True)  # this could match something in the text but since we're not stripping it here, will go with it
+#        blurb = find_keyword_string(local_post, "Summary", True)
+         # this could match something in the text but since we're not stripping it here, will go with it
     #if blurb:
         #print('\t Blurb: ' + blurb)
     return blurb
@@ -246,8 +246,8 @@ def get_file(cached_filename, file_is_local, url = ''):
 
 def get_post_msg_body(csv_line):
     # Fetch the body of the text from the post file
-    # THe extranouse author notes will be stripped in here and
-    # any blurb will be returned
+    # Any blurb will be extracted for return
+    # and then any extranouse author notes will be stripped in here
 
     post_url = csv_line[post_url_index]
     print('\t fetching post url: "{}"'.format(post_url))
@@ -255,7 +255,7 @@ def get_post_msg_body(csv_line):
     title = csv_line[title_index]
 
     # This must be local, because it must have been story_fixed already.
-    # if not present run + story fixer: get_file(msg_id+".html", False, post_url)
+    # ???   if not present run + story fixer: get_file(msg_id+".html", False, post_url)
     page_data = get_file(msg_id+".soup.html", file_is_local=True)
     # Fix an error by seth where tags must be lowercase.
     page_data = (page_data
@@ -280,8 +280,8 @@ def get_post_msg_body(csv_line):
 
     lower = post.lower()
     for trigger in ["a/n", "<dna", "author's note"]:
-        #TODO: the following generates a type error:
-        # assert trigger not in lower
+        #TODO: the following generates a type error:  WHY??
+        # assert trigger not in lower  
         pass
 
     # prune any leading BR_TAGs left at head/tail of body after comment stripping.
@@ -405,6 +405,8 @@ def ensure_new_story_format(page_data):
             page_data[copyright_index:]
         return page_date
 
+    #TODO: WHAT??
+
     # Human is responsible for this editing of archived files:
     #   1. Moving the JUMP_LINK_INSERTION_MARKER to the right point (after others or after navigations or after author name)
     #       a. If no pre-existing navigate / jump section add a following SEPERATOR_LINE (<p><hr></p>
@@ -508,6 +510,7 @@ csv_output["header"] = header + ["New Filename"]
 tbd_output = []     # this file will need to be processed by human and then csv_output file manually updated
 tbd_output.append(header + ["New Filename"])
 
+#TODO: temporary removal
 if False:
     # Download all forum messages for story_fixer.py
     for i, csv_line in enumerate(csv_input):
@@ -581,6 +584,7 @@ for i, csv_line in enumerate(csv_input):
             post_date, message_body,
             is_final)
 
+        #TODO - there was the case that the first entry was a dna, are there other cases?
         assert title not in csv_output or csv_output[title][action_index] == 'dna', (title, csv_output[title])
 
         #Save all the (new) data about this story (use stripped title) and the file (stripped of it's path name) where the new story resides:
@@ -759,7 +763,7 @@ for i, csv_line in enumerate(csv_input):
     elif action == "no-op":
         #these are extraneous posts, ignore here, let them archive in forum
         #TODO: return this statement for final run:
-        print('No-op({}): "{}" by {}'.format(i+2, title, author))
+        #print('No-op({}): "{}" by {}'.format(i+2, title, author))
         if title not in csv_output:
             csv_output[title] = csv_line[:last_csv_input_index+1] + ['']
         continue
@@ -771,6 +775,8 @@ for i, csv_line in enumerate(csv_input):
         continue
     elif action == "dna":
         #Do Not Archive, so, duh, do nothing here, do they get removed from forum archive?
+        #TODO - need to think about this question, if the message is not supposed to be archived but our
+        #  return is per story...
         print('DNA this post({}): "{}" by {}'.format(i+2, title, author))
         if title not in csv_output:
             csv_output[title] = csv_line[:last_csv_input_index+1] + ['']
