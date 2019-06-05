@@ -212,6 +212,9 @@ def format_new_post(title, author, post_date, post, is_final):
         date=post_date,
         body=post)
 
+    #TODO Note that story_data might already contain the author's closing words,
+    # if so, need to not duplicate them. Do a search in last ~100 chars of story body for the words in last
+
     closing_words = CLOSING_THE_END if is_final else CLOSING_TBC
     closing_section = STORY_STATUS_MARKER + closing_words + STORY_STATUS_MARKER_CLOSE
 
@@ -299,7 +302,7 @@ def get_post_msg_body(csv_line):
     post_start_text = '<div class="message-body">'
     post_end_text = '</div>'
 
-    assert page_data.startswith(post_start_text)
+    assert page_data.startswith(post_start_text), (page_data[:100])
     assert page_data.count(post_end_text) >= 1
     assert page_data.endswith(post_end_text), (page_data[-100:],)
 
@@ -403,6 +406,7 @@ def story_in_new_format(page_data, ignore_assert=True):
         assert ignore_assert, (story_status_index, len(page_data))
         return False
 
+    #TODO - commented these out until the closing duplication has been fixed:
 #    assert 'To Be Continue' not in page_data[:story_status_index], page_data[story_status_index-100:]
 #    assert 'The End' not in page_data[:story_status_index], page_data[story_status_index-100:]
 
@@ -420,7 +424,7 @@ def story_in_new_format(page_data, ignore_assert=True):
         return False
     return True
 
-
+#This is called with archived files that we are going to append to
 def ensure_new_story_format(page_data):
     if story_in_new_format(page_data):
         return page_data
@@ -450,6 +454,7 @@ def ensure_new_story_format(page_data):
     #       a. If no pre-existing navigate / jump section add a following SEPERATOR_LINE (<p><hr></p>)
     #   2. Moving STORY_STATUS_MARKER at end up to precede copyright and it's hr
     #       a. Move any existing <font>...To Be Continued...</font> from post body to inside the closing span
+    #           (this author provided story status info can actually be deleted 'cause the code will later!)
     #   3. Verifying STORY_STATUS_MARKER, SEPERATOR_LINE, &copy all in consecutive lines before final boilerplate
 
     # Need for linux counts to work.
@@ -496,6 +501,8 @@ CURRENT_STORY_STATUS_RE = re.compile(
     "(.{0,100})" +
     re.escape(STORY_STATUS_MARKER_CLOSE))
 
+# This is used to update the story ending status of all files created in here.
+#TODO: it needs to take into account that the author may have provided a closing of their own in the post.
 def change_story_status(page_data, is_final):
     current = CURRENT_STORY_STATUS_RE.search(page_data)
     assert current, "We didn't find STORY_STATUS_MARKER!"
@@ -507,6 +514,10 @@ def change_story_status(page_data, is_final):
         current.group(0), # The entire match STORY_STATUS_MARKER + current_text + STORY_STATUS_MARKER_CLOSE
         STORY_STATUS_MARKER + new_status + STORY_STATUS_MARKER_CLOSE)
 
+    #TODO: after the replace, but before the return,
+    # do a lower case search of the 70 chars before the STORY_STATUS_MARKER for {To Be Continued, The End, Fin}
+    #if not found, return
+    #if found, have the human take corrective action either substituting the author's for ours OR deleting it.
 
 ########## MAIN ##############
 
@@ -682,6 +693,7 @@ for i, csv_line in enumerate(csv_input):
         # deal with To Be Continued and The End
         page_data = change_story_status(page_data, is_final)
 
+        #We don't add jump links for these because no one has yet read this non-existant file!
         story_data = STORY_TEMPLATE.format(jump_label='', date=post_date, body=message_body,)
         #TODO: verify that the correct white space gets inserted between posts.
         page_data = page_data.replace(STORY_INSERTION_MARKER,
@@ -843,7 +855,7 @@ try:
        writer = csv.writer(csv_file)
        writer.writerows(csv_output.values())
 
-    with open(OUTPUT_CSV_PATH + '.tbd', "w", newline='') as tbd_file:
+    with open(OUTPUT_CSV_PATH + '.tbd.csv', "w", newline='') as tbd_file:
        writer = csv.writer(tbd_file)
        writer.writerows(tbd_output)
 
