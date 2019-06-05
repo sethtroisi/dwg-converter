@@ -29,11 +29,7 @@ def get_changes(file_path, file_data):
     assert len(bodies) == 1, len(bodies)
     body = bodies[0]
 
-    #temp:
-    #import pdb; pdb.set_trace()
-
-    # remove message options from bottom of post
-    #TODO - need to catch errors here due to "bad" html
+    # Remove message options from bottom of post
     body.find(class_="message-options").extract()
 
     file_actions = []
@@ -131,6 +127,9 @@ for fn in sorted(os.listdir(TO_FIX_DIR)):
         print(fn, len(data))
 
         file_actions, new_data = get_changes(file_path, data)
+
+        # TODO delete 'To be continue', 'The end', and Author Notes from end.
+
         print("\t", file_actions)
 
         while file_actions == new_data == None:

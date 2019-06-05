@@ -51,17 +51,18 @@ CACHE_DIRECTORY = "cache/"
 
 # For JUMP_SECTION
 JUMP_LINK_INSERTION_MARKER = '<span id="new-jumps-go-here"></span>'
-JUMP_TEMPLATE = '''
-<span class="navigation-links">
+JUMP_SECTION = '<span class="navigation-links">'
+JUMP_TEMPLATE = f'''
+{JUMP_SECTION}
     {{jump_link}}
-    {}
-</span>'''.format(JUMP_LINK_INSERTION_MARKER)
+    {JUMP_LINK_INSERTION_MARKER}
+</span>'''
 
 # For POST_BODY_SECTION
 STORY_TEMPLATE = '''
 <div class="post">
   <hr><p>
-  {jump_label}<i>Posted on {date}</i><br><br>
+  {jump_label}<i>Posted on {date}</i><br/><br/>
   {body}
 </div>
 '''
@@ -80,7 +81,8 @@ FINAL_SECTION_LENGTH_MAX = 220 # ToBeContinued is like really long man.
 
 #-----------------------
 
-BR_TAG = "<br />"
+BR_TAG = "<br/>"
+HR_TAG = "<hr>"
 ITALIC_TAG = "<i>"
 ITALIC_END_TAG = "</i>"
 BOLD_TAG = "<b>"
@@ -98,6 +100,7 @@ def str_equal(a, b):
     b = b.strip().casefold()
     return a == b
 
+
 def loose_equal(a, b):
     #Make sure that a and b are roughly error
     a = a.strip().casefold()
@@ -110,6 +113,7 @@ def loose_equal(a, b):
         return True
     return False
 
+
 def create_filename(author, title, post_date):
     #use first 15 printable chars of author concatenated with first 15 of title + posting date
     #filename = add 10 of author
@@ -118,6 +122,16 @@ def create_filename(author, title, post_date):
     post_date = re.sub('[^A-Za-z0-9]', '', post_date)
     filename = "cache/" + author[:10] + title[:15] + post_date + ".html"
     return(filename)
+
+
+def strip_post_space(data):
+    data = data.strip()
+
+    hr_br_or_space = r'(\s*<[bh]r */?>\s*)*'
+    data = re.sub(r'^' + hr_br_or_space, '', data)
+    data = re.sub(hr_br_or_space + r'$', '', data)
+    return data
+
 
 def strip_comment(post, fn):
     # Run this after Using story_fixer.py which will embed each DNA section in a DNA tag
@@ -134,6 +148,7 @@ def strip_comment(post, fn):
 
     for dna in DNAs:
         raw_dna = str(dna)
+
         # Soup often transforms html but shouldn't have here.
         assert raw_dna in original, (fn, dna)
 
@@ -157,9 +172,7 @@ def find_keyword_string (post, keyword, caseless = False):
 
     keyword_string = ''
     if start >= 0:    # found our tag;
-        #TODO: temp to test blurb's
-        #end = post.find(BR_TAG, start)
-        end = post.find("<br/>", start)
+        end = post.find(BR_TAG, start)
         assert end != -1, keyword + " string failed to terminate"
         keyword_string = post[start+len(keyword): end]
     return keyword_string
@@ -187,6 +200,7 @@ def get_blurb(post):
         #print('\t Blurb: ' + blurb)
     return blurb
 
+
 def format_new_post(title, author, post_date, post, is_final):
     # See ARCHIVE_TEMPLATE for template and layout
 
@@ -208,7 +222,7 @@ def format_new_post(title, author, post_date, post, is_final):
         .replace("$POST_BODY_SECTION", story_data)
         .replace("$CLOSING_SECTION", closing_section)
         #NOTE Seth had put this backlink in to jump to the original post but Margaret and I don't like that
-        #.replace("$OGLINK", '<a href="{}.html">originalpost</a><br>'.format(msg_id))
+        #.replace("$OGLINK", '<a href="{}.html">originalpost</a><br/>'.format(msg_id))
         .replace("$COPYRIGHT_YEAR", post_date[:4]))
 
     output_name = create_filename(author, title, post_date)
@@ -221,15 +235,13 @@ def format_new_post(title, author, post_date, post, is_final):
 
     return output_name
 
+
 def get_file(cached_filename, file_is_local, url = ''):
     # this finds, caches, and opens a copy of a file.
     # file_is_local asserts that we should find it in our cache because e.g. we just created it
-    # note that my original copy of this file contains a recursive version of this to handle chaining.
-    # i think seth now has implemented that elsewhere in seperate file.
 
     # Check if we already downloaded & saved locally
     cached_name = CACHE_DIRECTORY + cached_filename
-    #print('Get/Create this url: "{}"'.format(url))
 
     if os.path.exists(cached_name):
         with open(cached_name, "r", encoding="utf-8") as cached:
@@ -244,6 +256,8 @@ def get_file(cached_filename, file_is_local, url = ''):
         request = urllib.request.urlopen(url)
         charset = request.info().get_content_charset("latin-1")
         page_data = request.read().decode(charset)
+
+        page_data = html_cleanup(page_data)
         page_data = page_data.replace(
            '<script type="text/javascript" src="https://www.dwiggie.com/phorum/javascript.php?5"></script>',
            '')
@@ -253,7 +267,9 @@ def get_file(cached_filename, file_is_local, url = ''):
         print("\t\tDownloaded: " + url)
         time.sleep(2)
 
+    page_data = html_cleanup(page_data)
     return page_data
+
 
 def get_post_msg_body(csv_line):
     # Fetch the body of the text from the post file
@@ -289,20 +305,20 @@ def get_post_msg_body(csv_line):
 
     blurb = get_blurb(page_data)
 
-    post, comment_string = strip_comment(page_data, msg_id)
+    post, comment_string = strip_comment(page_data, post_fn)
 
     lower = post.lower()
     for trigger in ["a/n", "<dna", "author's note"]:
         # These have to be manually cleaned up by editing some files.
         assert trigger not in lower, (post_fn, trigger)
 
-    # prune any leading BR_TAGs left at head/tail of body after comment stripping.
-    post = post.strip()
-    while post.startswith(BR_TAG):
-        post = post[len(BR_TAG):].strip()
+# TODO requires story_fixer.py
+#    for trigger in ["to be continue", "the end"]:
+#        assert trigger not in lower[-400:], (post_fn, trigger)
 
-    while post.endswith(BR_TAG):
-        post = post[:-len(BR_TAG)].strip()
+    # Remove <div> and then prune leading spaces + br tags at head/tail.
+    post = strip_post_space(post[len(post_start_text):-len(post_end_text)])
+    post = post_start_text + post + post_end_text
 
     # Aid in the readability of html files.
     chars_per_line = len(post) / (post.count("\n") + 1)
@@ -327,6 +343,7 @@ def find_existing_copyright(page_data):
     assert start_text_index > 0, "source missing copyright statement"
     return start_text_index
 
+
 def get_copyright(page_data):
     start_text_index = find_existing_copyright(page_data)
     end_text_index = page_data.rfind(COPYRIGHT_POSTFIX, start_text_index)
@@ -334,6 +351,7 @@ def get_copyright(page_data):
     assert end_text_index - start_text_index < 100, (start_text_index, end_text_index)
     copyright_text = page_data[start_text_index: end_text_index]
     return copyright_text, start_text_index + len(COPYRIGHT_PREFIX)
+
 
 def update_copyright(page_data, post_date):
         text_copyright, copyright_index = get_copyright(page_data)
@@ -347,11 +365,12 @@ def update_copyright(page_data, post_date):
                 #print("\t\t new copyright string: " + updated_text_copyright)
         return page_data
 
+
 def html_cleanup(page_data):
     # Safe, easy to apply HTML cleanups.
 
     # fixing <hr /> with or without spaces
-    (page_data, fixed_hrs) = re.subn(r"<hr[\s/]+>", "<hr>", page_data)
+    #(page_data, fixed_hrs) = re.subn(r"<hr[\s/]+>", "<hr>", page_data)
     #if fixed_hrs > 0:
     #    print("\tFixed {} HRs".format(fixed_hrs))
 
@@ -360,7 +379,11 @@ def html_cleanup(page_data):
     #if fixed_end_p > 0:
     #    print("\tFixed {} <p><hr></p>".format(fixed_end_p))
 
+    # Make these uniform between new and old posts.
+    (page_data, fixed_br) = re.subn(r"<br\s*.?>", BR_TAG, page_data)
+
     # TODO try out removing all </p> and see if visually different (will help out with some problems around <i>/<b>)
+    # TODO try replacing 3+ br with 2.
 
     return page_data
 
@@ -380,8 +403,8 @@ def story_in_new_format(page_data, ignore_assert=True):
         assert ignore_assert, (story_status_index, len(page_data))
         return False
 
-    assert 'To Be Continue' not in page_data[:story_status_index], page_data[story_status_index-100:]
-    assert 'The End' not in page_data[:story_status_index], page_data[story_status_index-100:]
+#    assert 'To Be Continue' not in page_data[:story_status_index], page_data[story_status_index-100:]
+#    assert 'The End' not in page_data[:story_status_index], page_data[story_status_index-100:]
 
     final_lines =  page_data[story_status_index:].split("\n")
     # All non-empty lines near the end of the file
@@ -721,17 +744,12 @@ for i, csv_line in enumerate(csv_input):
             page_data = page_data.replace('<head>', '<head>\n <meta charset="utf-8"> \n')
 
         #search for and remove deprecated author addrs: <!--mailto: apterja@optusnet.com.au -->
-        start_index = page_data.find('<!--mailto:')
-        if start_index >=0:
-            end_index = page_data.find('-->', start_index)
-            author_str = page_data[start_index:end_index+3]
-            #print('\t REMOVED: ' + author_str)
-            page_data = page_data.replace(author_str, '')
+        page_data = re.sub(r'<!--mailto:.{1,50} -->', '', page_data, re.I)
 
         #insert the jump links first:
         jump_string_date = datetime.datetime.strptime(post_date, "%Y-%m-%d")
         jump_string_date_str = jump_string_date.strftime('%A %B %d, %Y')
-        jump_string = '\n<a href="#new{}">Jump to new as of {}</a><br />'.format(
+        jump_string = '\n<a href="#new{}">Jump to new as of {}</a><br/>'.format(
             csv_line[post_date_index], jump_string_date_str)
 
         jump_label = '<a id="new{}"></a>'.format(post_date)
@@ -757,6 +775,11 @@ for i, csv_line in enumerate(csv_input):
                 jump_label=jump_label + "\n",
                 date=post_date,
                 body=message_body)
+
+            if JUMP_SECTION in page_data and (JUMP_SECTION + SEPERATOR_LINE) not in page_data:
+                # To avoid double <hr> in new stories with no jump links we avoid adding the <hr>
+                # till the first append, but only add it the 1st append.
+                page_data = page_data.replace(JUMP_SECTION, JUMP_SECTION + SEPERATOR_LINE)
 
             new_page_data = (page_data
                 .replace(JUMP_LINK_INSERTION_MARKER, jump_string + "\n" + JUMP_LINK_INSERTION_MARKER)

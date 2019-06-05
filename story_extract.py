@@ -357,6 +357,7 @@ def join_posts(urls, filenames, story_data):
     POSTED_ON_FMT_STRING = '<i>{}</i><p>'
     HTML_COMMENT = '<!-- {} -->'
     COPYRIGHT_HTML = '&copy; {} Copyright held by the author.'
+    # TODO <br/> ?
     LINK_HTML = '<a href="{}">{}</a><br>'
 
     html_title = "\n".join(CENTER_FMT_STRING.format(t) for t in story_titles)
@@ -385,7 +386,7 @@ def join_posts(urls, filenames, story_data):
         html_title + html_author,
         html_posted_on,
         html_body,
-        "Compressed from<br>" + "\n".join(og_links),
+        "Compressed from<br/>" + "\n".join(og_links),
         html_copyright,
     ])
 
