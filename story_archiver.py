@@ -382,6 +382,9 @@ def story_in_new_format(page_data, ignore_assert=True):
         assert ignore_assert, (story_status_index, len(page_data))
         return False
 
+    assert 'To Be Continue' not in page_data[:story_status_index], page_data[story_status_index-100:]
+    assert 'The End' not in page_data[:story_status_index], page_data[story_status_index-100:]
+
     final_lines =  page_data[story_status_index:].split("\n")
     # All non-empty lines near the end of the file
     final_lines = [line.strip().lower() for line in final_lines if len(line.strip()) > 0]
