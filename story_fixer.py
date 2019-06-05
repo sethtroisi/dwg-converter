@@ -124,6 +124,9 @@ for fn in sorted(os.listdir(TO_FIX_DIR)):
             continue
 
         with open(file_path, encoding="utf-8") as forum_file:
+            # Break file over many lines
+            if data.count("\n") < 10:
+                data = data.replace("<br/>", "<br/>\n")
             data = forum_file.read()
 
         print()

@@ -12,7 +12,12 @@ from bs4 import BeautifulSoup
 
 #-----------------------
 
+DOWNLOAD_FIRST = True
 ONLY_A_FEW = False
+# TODO need to toggle of for final run.
+MOVING_FAST_BREAKING_THINGS = False
+
+#------------------------
 
 INPUT_CSV_PATH = "dwg-posts.csv"
 OUTPUT_CSV_PATH="dwg_archive_results.csv"
@@ -255,8 +260,10 @@ def get_post_msg_body(csv_line):
     title = csv_line[title_index]
 
     # This must be local, because it must have been story_fixed already.
-    # ???   if not present run + story fixer: get_file(msg_id+".html", False, post_url)
-    page_data = get_file(msg_id+".soup.html", file_is_local=True)
+    # if not present toggle DOWNLOAD_FIRST = True and run.
+    post_fn = msg_id + ".soup.html"
+    page_data = get_file(post_fn, file_is_local=True)
+
     # Fix an error by seth where tags must be lowercase.
     page_data = (page_data
         .replace('<DNA>', '<dna>')
@@ -280,9 +287,10 @@ def get_post_msg_body(csv_line):
 
     lower = post.lower()
     for trigger in ["a/n", "<dna", "author's note"]:
-        #TODO: the following generates a type error:  WHY??
-        # assert trigger not in lower  
-        pass
+        # These have to be manually cleaned up by editing some files.
+        if post_fn in ("128230.soup.html",):
+            continue
+        assert trigger not in lower, (post_fn, trigger)
 
     # prune any leading BR_TAGs left at head/tail of body after comment stripping.
     post = post.strip()
@@ -389,10 +397,12 @@ def ensure_new_story_format(page_data):
 
     page_data = html_cleanup(page_data)
 
-    #TODO remove before final run
+    # While MOVING_FAST_BREAKING_THINGS is turned on jump links and the story status marker will be incorrect.
+    # We fix this by hand (opening and fixing each file) but this takes A LOT of time, so we avoid it by
+    # using an approximating till we're ready for the final run.
+
     # This is the sloppy, doesn't work perfectly used for devel
-    moving_fast_breaking_things = True
-    if moving_fast_breaking_things:
+    if MOVING_FAST_BREAKING_THINGS:
         # story might not be considered in new format by story_in_new_format but we have our own special check
         if JUMP_LINK_INSERTION_MARKER in page_data and STORY_STATUS_MARKER in page_data:
             return page_data
@@ -405,21 +415,22 @@ def ensure_new_story_format(page_data):
             page_data[copyright_index:]
         return page_date
 
-    #TODO: WHAT??
-
     # Human is responsible for this editing of archived files:
     #   1. Moving the JUMP_LINK_INSERTION_MARKER to the right point (after others or after navigations or after author name)
-    #       a. If no pre-existing navigate / jump section add a following SEPERATOR_LINE (<p><hr></p>
+    #       a. If no pre-existing navigate / jump section add a following SEPERATOR_LINE (<p><hr></p>)
     #   2. Moving STORY_STATUS_MARKER at end up to precede copyright and it's hr
     #       a. Move any existing <font>...To Be Continued...</font> from post body to inside the closing span
     #   3. Verifying STORY_STATUS_MARKER, SEPERATOR_LINE, &copy all in consecutive lines before final boilerplate
+
+    # Need for linux counts to work.
+    page_data = page_data.replace("\r\n", "\n")
 
     # Open the file and let human move the markers to the right place
     write_data = "\n".join([
         JUMP_LINK_INSERTION_MARKER,
         page_data,
         STORY_STATUS_MARKER + STORY_STATUS_MARKER_CLOSE + "\n", # makes selection easier
-    ])
+    ]).replace("\r\n", "\n")
 
     with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False) as f:
         temp_file_path = f.name
@@ -428,7 +439,8 @@ def ensure_new_story_format(page_data):
         f.write(write_data)
 
     # Open the file for human processing
-    subprocess.check_output(["notepad.exe", temp_file_path])
+    #subprocess.check_output(["notepad.exe", temp_file_path])
+    subprocess.check_output(["gedit", temp_file_path])
 
     with open(temp_file_path, encoding="utf-8") as f:
         new_data = f.read()
@@ -485,7 +497,7 @@ print("Column Headers:")
 print(", ".join(header))
 #print()
 
-# verify important column assumptions
+# Verify important column assumptions
 assert header[post_date_index] == "last_update/Posting"
 assert header[msg_id_index] == "Msg Id"
 assert header[author_index] == "author_name"
@@ -510,8 +522,7 @@ csv_output["header"] = header + ["New Filename"]
 tbd_output = []     # this file will need to be processed by human and then csv_output file manually updated
 tbd_output.append(header + ["New Filename"])
 
-#TODO: temporary removal
-if False:
+if DOWNLOAD_FIRST:
     # Download all forum messages for story_fixer.py
     for i, csv_line in enumerate(csv_input):
         assert len(csv_line) == len(header), (len(header), csv_line)
@@ -548,7 +559,8 @@ for i, csv_line in enumerate(csv_input):
     post_date = csv_line[post_date_index]
     author = csv_line[author_index]
     temp_title = csv_line[title_index]
-    #title needs to be stripped of any excess verbiage, this assumes that CSV has been groomed to insert '::' at end of simple title
+    # Title needs to be stripped of any excess verbiage, this assumes that
+    # CSV has been groomed to insert '::' at end of simple title
     title_delimiter = '::'
     temp_index = temp_title.find(title_delimiter)    # returns -1 if not found
     if temp_index > 0:
@@ -642,7 +654,6 @@ for i, csv_line in enumerate(csv_input):
                                       story_data + "\n" + STORY_INSERTION_MARKER)
 
         page_data = update_copyright(page_data, post_date)
-
 
         output_file = CACHE_DIRECTORY + insertion_file
         with open(output_file, "w", encoding="utf-8") as output_file:
@@ -805,8 +816,12 @@ try:
 except IOError:
     print("I/O error")
 
-print('Archive complete: \n\t{} story files created\n\t\ \
-            {} Amendments must be completed manually (see log or CSV file)\n\t \
-            {} New Stories (with {} Updates to those)\n\t \
-            {} Archive Updates ({} stories)'.format(len(csv_output)-1, toAmend, archivedNew, appendedNew, \
-                                                     appendedArchive, (len(csv_output)-1-archivedNew)))
+# len - 1 is for the header line.
+print("""
+Archive complete:
+    {} story files created
+    {} Amendments must be completed manually (see log or CSV file)
+    {} New Stories (with {} Updates to those)
+    {} Archive Updates ({} stories)""".format(
+    len(csv_output)-1, toAmend, archivedNew, appendedNew,
+    appendedArchive, (len(csv_output)-1-archivedNew)))
