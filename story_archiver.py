@@ -19,7 +19,7 @@ MOVING_FAST_BREAKING_THINGS = False
 
 #------------------------
 
-INPUT_CSV_PATH = "dwg-posts.csv"
+INPUT_CSV_PATH = "dwg - posts.csv"
 OUTPUT_CSV_PATH="dwg_archive_results.csv"
 
 #Input CSV file should have the following columns with names specified in main below:
@@ -154,7 +154,10 @@ def find_keyword_string (post, keyword, caseless = False):
 
     keyword_string = ''
     if start >= 0:    # found our tag;
-        end = post.find(BR_TAG, start)
+        #TODO: temp to test blurb's
+        #end = post.find(BR_TAG, start)
+        end = post.find("<br/>", start)
+        assert end != -1, keyword + " string failed to terminate"
         keyword_string = post[start+len(keyword): end]
     return keyword_string
 
@@ -416,7 +419,7 @@ def ensure_new_story_format(page_data):
         return page_date
 
     # Human is responsible for this editing of archived files:
-    #   1. Moving the JUMP_LINK_INSERTION_MARKER to the right point (after others or after navigations or after author name)
+    #   1. Moving the JUMP_LINK_INSERTION_MARKER to the correct point (after others or after navigations or after author name)
     #       a. If no pre-existing navigate / jump section add a following SEPERATOR_LINE (<p><hr></p>)
     #   2. Moving STORY_STATUS_MARKER at end up to precede copyright and it's hr
     #       a. Move any existing <font>...To Be Continued...</font> from post body to inside the closing span
@@ -430,7 +433,7 @@ def ensure_new_story_format(page_data):
         JUMP_LINK_INSERTION_MARKER,
         page_data,
         STORY_STATUS_MARKER + STORY_STATUS_MARKER_CLOSE + "\n", # makes selection easier
-    ]).replace("\r\n", "\n")
+    ])
 
     with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False) as f:
         temp_file_path = f.name
@@ -445,9 +448,9 @@ def ensure_new_story_format(page_data):
     with open(temp_file_path, encoding="utf-8") as f:
         new_data = f.read()
 
-    # TODO more verification that files are mostly the same
     # if 1a then <p><hr></p> adds ~15 characters
-    assert len(write_data) + 20 >= len(new_data) > len(page_data), (len(write_data), len(new_data), len(page_data))
+    # Make sure no more than 30 characters were added to the file.
+    assert len(write_data) + 30 >= len(new_data) > len(page_data), (len(write_data), len(new_data), len(page_data))
 
     os.unlink(temp_file_path)
 
@@ -547,6 +550,7 @@ for i, csv_line in enumerate(csv_input):
     action = csv_line[action_index]
     category = csv_line[category_index]    #note that this value could be null
     msg_id = csv_line[msg_id_index]
+    #TODO: we need to ensure that we don't duplicate the author's closing - we have duplicate "The End"s
     is_final = csv_line[final_post_index].lower().startswith('y')
 
     # Archived entries shouldn't have a action:
@@ -728,55 +732,58 @@ for i, csv_line in enumerate(csv_input):
         assert JUMP_LINK_INSERTION_MARKER in page_data, "should have been tested"
         assert STORY_INSERTION_MARKER in page_data, "see above line"
 
-        #TODO this needs to be toggled off for code testings
         if jump_string in page_data and jump_label in page_data:
             print("\tAppend already performed (already found {})".format(jump_label))
-            continue
+        else:
+            # remove any closing from existing file and append correct status to end of new:
+            #TODO ensure that this works correctly for both this and append to new stories.
+            page_data = change_story_status(page_data, is_final)
 
-        # remove any closing from existing file and append correct status to end of new:
-        #TODO ensure that this works correctly for both this and append to new stories.
-        page_data = change_story_status(page_data, is_final)
+            insertion_index =  page_data.index(STORY_INSERTION_MARKER)
+            #print("\t insert location: {} in {} length file ({} from end)".format(
+            #    insertion_index, len(page_data), insertion_index - len(page_data)))
+            #print("\t {} characters copied, {:.1f}% of new file".format(
+            #    len(message_body), 100 * len(message_body) / len(page_data)))
+            assert insertion_index and insertion_index > (len(page_data)- FINAL_SECTION_LENGTH_MAX)
 
-        insertion_index =  page_data.index(STORY_INSERTION_MARKER)
-        #print("\t insert location: {} in {} length file ({} from end)".format(
-        #    insertion_index, len(page_data), insertion_index - len(page_data)))
-        #print("\t {} characters copied, {:.1f}% of new file".format(
-        #    len(message_body), 100 * len(message_body) / len(page_data)))
-        assert insertion_index and insertion_index > (len(page_data)- FINAL_SECTION_LENGTH_MAX)
+            story_data = STORY_TEMPLATE.format(
+                jump_label=jump_label + "\n",
+                date=post_date,
+                body=message_body)
 
-        story_data = STORY_TEMPLATE.format(
-            jump_label=jump_label + "\n",
-            date=post_date,
-            body=message_body)
+            new_page_data = (page_data
+                .replace(JUMP_LINK_INSERTION_MARKER, jump_string + "\n" + JUMP_LINK_INSERTION_MARKER)
+                .replace(STORY_INSERTION_MARKER, story_data + "\n" +  STORY_INSERTION_MARKER)
+            )
 
-        new_page_data = (page_data
-            .replace(JUMP_LINK_INSERTION_MARKER, jump_string + "\n" + JUMP_LINK_INSERTION_MARKER)
-            .replace(STORY_INSERTION_MARKER, story_data + "\n" +  STORY_INSERTION_MARKER)
-        )
+            new_page_data = update_copyright(new_page_data, post_date)
 
-        new_page_data = update_copyright(new_page_data, post_date)
+            output_file = CACHE_DIRECTORY + insertion_filename
+            with open(output_file, "w", encoding="utf-8") as output_file:
+                output_file.write(new_page_data)
 
-        output_file = CACHE_DIRECTORY + insertion_filename
-        with open(output_file, "w", encoding="utf-8") as output_file:
-            output_file.write(new_page_data)
-
+        #TODO: should we copy the entire csv_line?
         if title not in csv_output:     # start with the archived story data
             #print('\tAdding title to csv output', title)
             csv_output[title] = test_line[:last_csv_input_index+1] + [insertion_filename]
             csv_output[title][action_index] = csv_line[action_index]
             csv_output[title][category_index] = csv_line[category_index]
+
         csv_output[title][post_date_index] = csv_line[post_date_index]
         csv_output[title][final_post_index] = csv_line[final_post_index]
+
+        if blurb:
+            csv_output[title][blurb_index] = blurb
+
 
         appendedArchive += 1
         continue
 
     elif action == "no-op":
-        #these are extraneous posts, ignore here, let them archive in forum
-        #TODO: return this statement for final run:
+        #these are extraneous posts, for example, previously processed posts,
+        # ignore here, but they will get archived from forum
+
         #print('No-op({}): "{}" by {}'.format(i+2, title, author))
-        if title not in csv_output:
-            csv_output[title] = csv_line[:last_csv_input_index+1] + ['']
         continue
     elif action == "delete":
         #garbage post that is ignored here and deleted from forum
@@ -786,8 +793,6 @@ for i, csv_line in enumerate(csv_input):
         continue
     elif action == "dna":
         #Do Not Archive, so, duh, do nothing here, do they get removed from forum archive?
-        #TODO - need to think about this question, if the message is not supposed to be archived but our
-        #  return is per story...
         print('DNA this post({}): "{}" by {}'.format(i+2, title, author))
         if title not in csv_output:
             csv_output[title] = csv_line[:last_csv_input_index+1] + ['']
