@@ -4,6 +4,7 @@ import os.path
 import urllib.request
 import datetime
 import re
+import sys
 import subprocess
 import time
 import tempfile
@@ -88,6 +89,8 @@ BOLD_END_TAG = "</b>"
 SEPERATOR_LINE = "<p><hr><p>"        # this draws visual horizontal lines.
 
 #-----------------------
+
+IS_LINUX = sys.platform.lower().startswith('linux')
 
 
 def str_equal(a, b):
@@ -426,7 +429,8 @@ def ensure_new_story_format(page_data):
     #   3. Verifying STORY_STATUS_MARKER, SEPERATOR_LINE, &copy all in consecutive lines before final boilerplate
 
     # Need for linux counts to work.
-    page_data = page_data.replace("\r\n", "\n")
+    if IS_LINUX:
+        page_data = page_data.replace("\r\n", "\n")
 
     # Open the file and let human move the markers to the right place
     write_data = "\n".join([
@@ -442,8 +446,10 @@ def ensure_new_story_format(page_data):
         f.write(write_data)
 
     # Open the file for human processing
-    #subprocess.check_output(["notepad.exe", temp_file_path])
-    subprocess.check_output(["gedit", temp_file_path])
+    if IS_LINUX:
+        subprocess.check_output(["gedit", temp_file_path])
+    else:
+        subprocess.check_output(["notepad.exe", temp_file_path])
 
     with open(temp_file_path, encoding="utf-8") as f:
         new_data = f.read()
