@@ -13,8 +13,13 @@ import subprocess
 ANCHOR_FINDER = re.compile('<a *name="*([a-z0-9-]*)"* *\?>')
 
 def save_html(file_path, soup):
+    data = soup
+    if len(data) // data.count("\n") > 300:
+        print("Adding newlines", data.count("<br/>"))
+        data = data.replace("<br/>", "<br/>\n")
+
     with open(file_path, "w", encoding="utf-8") as file:
-        file.write(str(soup))
+        file.write(data)
 
 def get_changes(file_path, file_data):
     # TODO verify that soup doesn't change message body too dramatically.
@@ -109,11 +114,6 @@ TO_FIX_DIR = "cache/"
 POST_REGEX = r'^[0-9]+.html$'
 
 for fn in sorted(os.listdir(TO_FIX_DIR)):
-
-    #TODO TEMP To determine error:
-    #if fn != '126607.html':
-    #   continue
-
     if re.match(POST_REGEX, fn):
         file_path = TO_FIX_DIR + "/" + fn
 
@@ -125,8 +125,6 @@ for fn in sorted(os.listdir(TO_FIX_DIR)):
 
         with open(file_path, encoding="utf-8") as forum_file:
             # Break file over many lines
-            if data.count("\n") < 10:
-                data = data.replace("<br/>", "<br/>\n")
             data = forum_file.read()
 
         print()

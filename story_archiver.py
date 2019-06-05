@@ -13,7 +13,7 @@ from bs4 import BeautifulSoup
 
 #-----------------------
 
-DOWNLOAD_FIRST = True
+DOWNLOAD_FIRST = False
 ONLY_A_FEW = False
 # TODO need to toggle of for final run.
 MOVING_FAST_BREAKING_THINGS = False
@@ -294,8 +294,6 @@ def get_post_msg_body(csv_line):
     lower = post.lower()
     for trigger in ["a/n", "<dna", "author's note"]:
         # These have to be manually cleaned up by editing some files.
-        if post_fn in ("128230.soup.html",):
-            continue
         assert trigger not in lower, (post_fn, trigger)
 
     # prune any leading BR_TAGs left at head/tail of body after comment stripping.
