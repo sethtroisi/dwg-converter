@@ -2,7 +2,6 @@ import json
 import os
 import re
 
-
 from bs4 import BeautifulSoup
 
 import subprocess
@@ -12,35 +11,19 @@ import subprocess
 # temp = data.replace("\n\n\n\n", "\n").replace("\n\n\n", "\n")
 ANCHOR_FINDER = re.compile('<a *name="*([a-z0-9-]*)"* *\?>')
 
-def save_html(file_path, soup):
-    data = soup
-    if len(data) // data.count("\n") > 300:
-        print("Adding newlines", data.count("<br/>"))
+
+def save_html(file_path, body_str):
+    data = body_str
+    if len(data) // (1 + data.count("\n")) > 300:
+        print ("Adding newlines", data.count("<br/>"))
         data = data.replace("<br/>", "<br/>\n")
 
     with open(file_path, "w", encoding="utf-8") as file:
         file.write(data)
 
-def get_changes(file_path, file_data):
-    # TODO verify that soup doesn't change message body too dramatically.
-    soup = BeautifulSoup(file_data, "html.parser")
 
-    bodies = soup.find_all(class_="message-body")
-    assert len(bodies) == 1, len(bodies)
-    body = bodies[0]
-
-    # Remove message options from bottom of post
-    body.find(class_="message-options").extract()
-
-    file_actions = []
-
-    children = []
-    for i, child in enumerate(body.recursiveChildGenerator()):
-        if i == 24:
-            break
-
-        children.append(child)
-
+def select_dna(soup, body, children, part):
+    for i, child in children:
         content = str(child)
 
         depth = 1
@@ -50,23 +33,26 @@ def get_changes(file_path, file_data):
             n = n.parent
 
         name = child.name if child.name else "<NONE>"
-        print("{:2}{}{:8} {:4} | {}".format(
-            i, "\t" * depth, name, len(content), content[:60]))
+        short_line = content
+        if len(content) >= 100:
+            short_line = content[:57] + "..." + content[-40:]
+
+        print ("{:2}{}{:8} {:4} | {}".format(
+            i, "\t" * depth, name, len(content), short_line))
+
+    file_actions = []
 
     print()
     print()
-    print("D: [D]one with this file")
+    print("D: [D]one with {} of file".format(part))
     print("r: [R]evert all deletes")
     print("q: [Q]uit (be done for now)")
     print()
     while True:
         action = input("drq|<line>|<line>-<line>: ").lower()
         if action == "d":
-            new_path = file_path.replace(".html", ".soup.html")
-            #print("Done with this file! Saving as", new_path)
-            print("Done with this file! *****************************************")
-            save_html(new_path, body)
-            return file_actions, str(body)
+            # TODO: consider adding a confirmation on leaving in "To Be Continued", "The End", "Fin"
+            return file_actions, True
         elif action == "r":
             print("Reverting and restarting")
             return None, None
@@ -89,19 +75,63 @@ def get_changes(file_path, file_data):
         dna_tag = soup.new_tag("dna")
 
         for c in range(first, last+1):
-            node = children[c]
+            for i, node in children:
+                if i == c:
+                    if c == first:
+                        # replace child/node in doc with empty AUTHOR_NOTE tag.
+                        node.replace_with(dna_tag)
+                    else:
+                        node.extract()
 
-            if c == first:
-                # replace child in doc with empty AUTHOR_NOTE tag.
-                node.replace_with(dna_tag)
+                    # place child/node inside dna tag.
+                    dna_tag.append(node)
+
+                    file_actions.append(((first, last), str(node)))
+                    print("Encapsulating:", str(node)[:60])
+                    break
             else:
-                node.extract()
+                print("Didn't find line", c, "REVERTING")
+                return None, None
 
-            # place child inside dna tag.
-            dna_tag.append(node)
 
-            file_actions.append(((first, last), str(node)))
-            print("Encapsulating:", str(node)[:60])
+def get_changes(file_path, file_data):
+    # TODO verify that soup doesn't change message body too dramatically.
+    soup = BeautifulSoup(file_data, "html.parser")
+
+    bodies = soup.find_all(class_="message-body")
+    assert len(bodies) == 1, len(bodies)
+    body = bodies[0]
+
+    # Remove message options from bottom of post
+    body.find(class_="message-options").extract()
+
+    children = []
+    for i, child in enumerate(body.recursiveChildGenerator()):
+        children.append((i, child))
+
+    print ("*" * 80)
+    print ("Start of", file_path, len(data), "characterss")
+
+    # First 26 lines
+    file_actions, status = select_dna(soup, body, children[:26], "top")
+    if not status:
+        # Revert or Quit
+        return file_actions, status
+
+    # Last 16 lines
+    file_actions2, status = select_dna(soup, body, children[-16:], "end")
+    if not status:
+        return file_actions2, status
+
+    new_path = file_path.replace(".html", ".soup.html")
+    save_html(new_path, str(body))
+
+    print ("\tActions:", file_actions)
+
+    print ("Done with this file!")
+    print ("*" * 80)
+
+    return file_actions + file_actions2, True
 
 
 #-------------------
@@ -116,25 +146,19 @@ for fn in sorted(os.listdir(TO_FIX_DIR)):
         #assume any exisiting file is already processed and skip it:
         soup_path = file_path.replace(".html", ".soup.html")
         if os.path.exists(soup_path):
-            print(file_path + " already processed")
+            print (file_path + " already processed")
             continue
 
         with open(file_path, encoding="utf-8") as forum_file:
             # Break file over many lines
             data = forum_file.read()
 
-        print()
-        print(fn, len(data))
+        print ()
+        file_actions, status = get_changes(file_path, data)
 
-        file_actions, new_data = get_changes(file_path, data)
-
-        # TODO delete 'To be continue', 'The end', and Author Notes from end.
-
-        print("\t", file_actions)
-
-        while file_actions == new_data == None:
+        while file_actions == status == None:
             # revert: retry
-            file_actions, new_data = get_changes(file_path, data)
+            file_actions, status = get_changes(file_path, data)
 
         if file_actions == "QUIT":
             break

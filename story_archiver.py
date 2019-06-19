@@ -315,8 +315,8 @@ def get_post_msg_body(csv_line):
         # These have to be manually cleaned up by editing some files.
         assert trigger not in lower, (post_fn, trigger)
 
-# TODO requires story_fixer.py
-#    for trigger in ["to be continue", "the end"]:
+    for trigger in ["to be continue", "the end"]:
+        # Open story to fix these things.
 #        assert trigger not in lower[-400:], (post_fn, trigger)
 
     # Remove <div> and then prune leading spaces + br tags at head/tail.
