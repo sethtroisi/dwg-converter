@@ -51,7 +51,6 @@ def select_dna(soup, body, children, part):
     while True:
         action = input("drq|<line>|<line>-<line>: ").lower()
         if action == "d":
-            # TODO: consider adding a confirmation on leaving in "To Be Continued", "The End", "Fin"
             return file_actions, True
         elif action == "r":
             print("Reverting and restarting")
@@ -92,6 +91,7 @@ def select_dna(soup, body, children, part):
             else:
                 print("Didn't find line", c, "REVERTING")
                 return None, None
+        print()
 
 
 def get_changes(file_path, file_data):
@@ -113,18 +113,28 @@ def get_changes(file_path, file_data):
     print ("Start of", file_path, len(data), "characterss")
 
     # First 26 lines
-    file_actions, status = select_dna(soup, body, children[:26], "top")
+    file_actions1, status = select_dna(soup, body, children[:26], "top")
     if not status:
         # Revert or Quit
-        return file_actions, status
+        return file_actions1, status
 
     # Last 16 lines
     file_actions2, status = select_dna(soup, body, children[-16:], "end")
     if not status:
         return file_actions2, status
 
+    file_actions = file_actions1 + file_actions2
+
+    # TODO: consider adding a confirmation on leaving in "To Be Continued", "The End", "Fin"
+    edit_message = "Last edit at"
+    edit_was_present = edit_message in str(body)
+    edit_was_removed = any(edit_message in action[1] for action in file_actions)
+
+    assert (not edit_was_present) or edit_was_removed, (
+        edit_was_present, edit_was_removed, file_actions)
+
     new_path = file_path.replace(".html", ".soup.html")
-    save_html(new_path, str(body))
+    save_html(new_path, body.prettify())
 
     print ("\tActions:", file_actions)
 

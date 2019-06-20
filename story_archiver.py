@@ -15,7 +15,7 @@ from bs4 import BeautifulSoup
 
 DOWNLOAD_FIRST = False
 ONLY_A_FEW = False
-# TODO need to toggle of for final run.
+# TODO need to toggle off for final run.
 MOVING_FAST_BREAKING_THINGS = False
 
 #------------------------
@@ -147,16 +147,23 @@ def strip_comment(post, fn):
     original = post
 
     for dna in DNAs:
-        raw_dna = str(dna)
+        raw_dna = re.escape(str(dna))
+
+        # Need to fix indenting in html issues
+        pretty_dna = "\s*" + re.escape(dna.prettify()).replace("\n", "\n\s*")
 
         # Soup often transforms html but shouldn't have here.
-        assert raw_dna in original, (fn, dna)
+        for text in [raw_dna, pretty_dna]:
+            match = re.search(text, original)
+            if match:
+                post = post.replace(match.group(), "", 1)
 
-        if raw_dna in post:
-            post = post.replace(raw_dna, "", 1)
+                print('\t REMOVED: "{}"'.format(match.group().replace("\n", "")))
+                purged.append(dna.text)
+                break
+        else:
+            assert False, ("Didn't find DNA to remove", fn, dna)
 
-            print('\t REMOVED: "{}"'.format(dna.text))
-            purged.append(dna.text)
 
     return post, " | ".join(purged)
 
@@ -313,11 +320,12 @@ def get_post_msg_body(csv_line):
     lower = post.lower()
     for trigger in ["a/n", "<dna", "author's note"]:
         # These have to be manually cleaned up by editing some files.
-        assert trigger not in lower, (post_fn, trigger)
+        start = lower.find(trigger)
+        assert start == -1, (post_fn, trigger, lower[start-10:start+10])
 
-    for trigger in ["to be continue", "the end"]:
-        # Open story to fix these things.
-#        assert trigger not in lower[-400:], (post_fn, trigger)
+#   TODO print "manual inspect" warning.
+#    for trigger in ["to be continued", "the end\W", "\Wfin\W"]:
+#        assert not re.search(trigger, lower[-400:], re.I), (post_fn, trigger)
 
     # Remove <div> and then prune leading spaces + br tags at head/tail.
     post = strip_post_space(post[len(post_start_text):-len(post_end_text)])
@@ -338,13 +346,11 @@ ANOTHER_COPYRIGHT_PREFIX = '©'
 COPYRIGHT_POSTFIX = ' Copyright held by the author.'
 
 def find_existing_copyright(page_data):
-    start_text_index = page_data.rfind(COPYRIGHT_PREFIX)
-    if start_text_index < 0:
-        start_text_index = page_data.rfind(OLD_COPYRIGHT_PREFIX)
-        if start_text_index < 0:
-            start_text_index = page_data.rfind(ANOTHER_COPYRIGHT_PREFIX)
+    for C_PREFIX in [COPYRIGHT_PREFIX, OLD_COPYRIGHT_PREFIX, ANOTHER_COPYRIGHT_PREFIX]:
+        start_text_index = page_data.rfind(C_PREFIX)
+        if start_text_index > 0:
+            return start_text_index
     assert start_text_index > 0, "source missing copyright statement"
-    return start_text_index
 
 
 def get_copyright(page_data):
@@ -353,17 +359,21 @@ def get_copyright(page_data):
     assert start_text_index > 0 and end_text_index > 0
     assert end_text_index - start_text_index < 100, (start_text_index, end_text_index)
     copyright_text = page_data[start_text_index: end_text_index]
-    return copyright_text, start_text_index + len(COPYRIGHT_PREFIX)
+    return copyright_text
 
 
 def update_copyright(page_data, post_date):
-        text_copyright, copyright_index = get_copyright(page_data)
+        text_copyright = get_copyright(page_data)
+        year_match = re.search('[12][09][0-9][0-9]', text_copyright)
+        assert year_match, text_copyright
+        old_copyright_year = year_match.group()
+
         new_copyright_year = post_date[:4]
-        #print("\t original copyright text: " + text_copyright + " new copyright " + new_copyright_year + " @loc {}".format(copyright_index))
+        #print("\t original copyright text: " + text_copyright + " new copyright " + new_copyright_year
         # the newly inserted copyright is going to look like this: "c YYYY [ - YYYY] Copyright held by the author."
         match = text_copyright.find(new_copyright_year)
         if match == -1:      # our date is not yet in the string,  append new date, overwriting any prexisting second year:
-                updated_text_copyright = COPYRIGHT_PREFIX + page_data[copyright_index:copyright_index+4] + " - " + new_copyright_year
+                updated_text_copyright = COPYRIGHT_PREFIX + old_copyright_year + " - " + new_copyright_year
                 page_data = page_data.replace(text_copyright, updated_text_copyright)
                 #print("\t\t new copyright string: " + updated_text_copyright)
         return page_data
