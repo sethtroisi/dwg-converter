@@ -120,7 +120,7 @@ def create_filename(author, title, post_date):
     author = re.sub('[^A-Za-z0-9]', '', author)
     title = re.sub('[^A-Za-z0-9]', '', title)
     post_date = re.sub('[^A-Za-z0-9]', '', post_date)
-    filename = "cache/" + author[:10] + title[:15] + post_date + ".html"
+    filename = os.path.join(CACHE_DIRECTORY, author[:10] + title[:15] + post_date + ".html")
     return(filename)
 
 
@@ -251,7 +251,7 @@ def get_file(cached_filename, file_is_local, url = ''):
     # file_is_local asserts that we should find it in our cache because e.g. we just created it
 
     # Check if we already downloaded & saved locally
-    cached_name = CACHE_DIRECTORY + cached_filename
+    cached_name = os.path.join(CACHE_DIRECTORY, cached_filename)
 
     if os.path.exists(cached_name):
         with open(cached_name, "r", encoding="utf-8") as cached:
@@ -434,10 +434,16 @@ def story_in_new_format(page_data, ignore_assert=True):
         return False
     return True
 
+
 #This is called with archived files that we are going to append to
-def ensure_new_story_format(page_data):
+def ensure_new_story_format(file_name, page_data):
     if story_in_new_format(page_data):
         return page_data
+
+    cache_name = os.path.join(CACHE_DIRECTORY, file_name.split(".", 1)[0] + ".cache.html")
+    if os.path.exists(cache_name):
+        with open(cache_name, encoding="utf-8") as f:
+            return f.read()
 
     page_data = html_cleanup(page_data)
 
@@ -491,7 +497,7 @@ def ensure_new_story_format(page_data):
         subprocess.check_output(["notepad.exe", temp_file_path])
 
     with open(temp_file_path, encoding="utf-8") as f:
-        new_data = f.read()
+        new_data = f.read().strip()
 
     # if 1a then <p><hr></p> adds ~15 characters
     # Make sure no more than 30 characters were added to the file.
@@ -502,6 +508,10 @@ def ensure_new_story_format(page_data):
     assert not new_data.startswith(JUMP_LINK_INSERTION_MARKER), "You forgot to move the jump marker!"
     assert not new_data.endswith(STORY_STATUS_MARKER_CLOSE), "You forgot to move the stuff at the bottom"
     assert story_in_new_format(new_data, ignore_assert=False)
+
+    # Cache new format file.
+    with open(cache_name, "w", encoding="utf-8") as f:
+        f.write(new_data)
 
     return new_data
 
@@ -711,7 +721,7 @@ for i, csv_line in enumerate(csv_input):
 
         page_data = update_copyright(page_data, post_date)
 
-        output_file = CACHE_DIRECTORY + insertion_file
+        output_file = os.path.join(CACHE_DIRECTORY, insertion_file)
         with open(output_file, "w", encoding="utf-8") as output_file:
             output_file.write(page_data)
 
@@ -753,9 +763,9 @@ for i, csv_line in enumerate(csv_input):
         # find the insertion file, going to hope they all have same basic format at end!
         # Note: because the local cache is searched first, multiple calls to append archive will magically work correctly!
         start_indx = archive_url.rfind("/")
-        insertion_filename = archive_url[start_indx:]
+        insertion_filename = archive_url[start_indx+1:]
         page_data = get_file(insertion_filename, False, archive_url)
-        page_data = ensure_new_story_format(page_data)
+        page_data = ensure_new_story_format(insertion_filename, page_data)
 
         #TODO: this is temp code to make styles look correct in local work, remove before done:
         page_data = page_data.replace('/style/stories.css', 'style/stories.css')
@@ -810,7 +820,7 @@ for i, csv_line in enumerate(csv_input):
 
             new_page_data = update_copyright(new_page_data, post_date)
 
-            output_file = CACHE_DIRECTORY + insertion_filename
+            output_file = os.path.join(CACHE_DIRECTORY, insertion_filename)
             with open(output_file, "w", encoding="utf-8") as output_file:
                 output_file.write(new_page_data)
 
