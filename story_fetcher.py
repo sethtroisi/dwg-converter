@@ -18,7 +18,7 @@ SHOW_EXTERNAL_LINKS = False
 # Show any oddities with names of stories
 SHOW_STORY_NAMING_ODDITIES = False
 
-INPUT_CSV_PATH = 'dwg-posts.csv'
+INPUT_CSV_PATH = 'dwg - posts.csv'
 
 #Input CSV file should have the following columns with names specified in main below:
 ARCHIVE_URL_INDX = 9
@@ -220,7 +220,7 @@ def group_posts_into_stories(processed, out_links):
             if other in out_links:
                 open_links.update(out_links[other])
             else:
-                print("Not processed?:", other)
+                print("Not processed?:", other, "/n/tFrom url: ", url)
 
         # need some "canonical" url
         leader = min(group)
@@ -272,12 +272,14 @@ for key, filename in processed.items():
 for key, fn in not_dl:
     processed.pop(key)
     out_links.pop(key)
+
 if len(not_dl):
-    print('\n{} not downloaded files: {}\n'.format(len(not_dl)), nod_dl[:10])
+    print(*not_dl, sep='\n')
+    print('\n{} files not downloaded: \n'.format(len(not_dl)))
 
 
 print('\n\n{} files'.format(len(processed)))
-print('\twith {} outgoing links'.format(
+print('\twith {} outgoing links\n'.format(
     sum([len(links) for links in out_links.values()])))
 
 
@@ -288,7 +290,7 @@ print('\twith {} outgoing links'.format(
 groupings = group_posts_into_stories(processed, out_links)
 
 page_count = Counter([len(group) for group in groupings.values()])
-print ("{} groupings:".format(sum(page_count.values())))
+print ("\n{} groupings:".format(sum(page_count.values())))
 for pages, count in sorted(page_count.items()):
     print ("\t{} pages x {} stories".format(pages, count))
 

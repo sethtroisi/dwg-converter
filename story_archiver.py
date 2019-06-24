@@ -599,6 +599,8 @@ if DOWNLOAD_FIRST:
             cache_name = msg_id + ".html"
             assert get_file(cache_name, False, post_url)
             print ("\t\tCached {} => {}".format(post_url, cache_name))
+    print("\nFiles fetched. Now run story extractor, then toggle DOWNLOAD_FIRST and rerun story archiver\n")
+    sys.exit()
 
 toAmend = 0
 archivedNew = 0
