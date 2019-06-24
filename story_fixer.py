@@ -1,14 +1,16 @@
 import json
 import os
 import re
+import sys
 
 from bs4 import BeautifulSoup
 
 import subprocess
 #output = subprocess.check_output(["notepad", "test.txt"])
 
+CACHE_DIR = "cache/"
+POST_REGEX = r'^[0-9]+.html$'
 
-# temp = data.replace("\n\n\n\n", "\n").replace("\n\n\n", "\n")
 ANCHOR_FINDER = re.compile('<a *name="*([a-z0-9-]*)"* *\?>')
 
 
@@ -51,13 +53,13 @@ def select_dna(soup, body, children, part):
     while True:
         action = input("drq|<line>|<line>-<line>: ").lower()
         if action == "d":
-            return file_actions, True
+            return True, file_actions
         elif action == "r":
             print("Reverting and restarting")
-            return None, None
+            return False, None
         elif action == "q":
             print("Quitting story_fixer for now!")
-            return "QUIT", None
+            sys.exit()
 
         # Match "<line>" or "<line>-<line>"
         valid_action = re.match("(\d+)(?:-(\d+))?", action, re.I)
@@ -90,7 +92,7 @@ def select_dna(soup, body, children, part):
                     break
             else:
                 print("Didn't find line", c, "REVERTING")
-                return None, None
+                return False, None
         print()
 
 
@@ -110,18 +112,18 @@ def get_changes(file_path, file_data):
         children.append((i, child))
 
     print ("*" * 80)
-    print ("Start of", file_path, len(data), "characterss")
+    print ("Start of", file_path, len(file_data), "characterss")
 
     # First 26 lines
-    file_actions1, status = select_dna(soup, body, children[:26], "top")
+    status, file_actions1 = select_dna(soup, body, children[:26], "top")
     if not status:
         # Revert or Quit
-        return file_actions1, status
+        return status
 
     # Last 16 lines
-    file_actions2, status = select_dna(soup, body, children[-16:], "end")
+    status, file_actions2 = select_dna(soup, body, children[-16:], "end")
     if not status:
-        return file_actions2, status
+        return status
 
     file_actions = file_actions1 + file_actions2
 
@@ -141,34 +143,39 @@ def get_changes(file_path, file_data):
     print ("Done with this file!")
     print ("*" * 80)
 
-    return file_actions + file_actions2, True
+    return True
 
 
 #-------------------
 
-TO_FIX_DIR = "cache/"
-POST_REGEX = r'^[0-9]+.html$'
+def fix_one_file(file_name):
+    file_path = CACHE_DIR + "/" + file_name
+    assert os.path.exists(file_path), file_name + " should exist before we try to fix it"
 
-for fn in sorted(os.listdir(TO_FIX_DIR)):
-    if re.match(POST_REGEX, fn):
-        file_path = TO_FIX_DIR + "/" + fn
+    #assume any exisiting file is already processed and skip it:
+    soup_path = file_path.replace(".html", ".soup.html")
+    if os.path.exists(soup_path):
+        print (file_path + " already processed")
+        return True
 
-        #assume any exisiting file is already processed and skip it:
-        soup_path = file_path.replace(".html", ".soup.html")
-        if os.path.exists(soup_path):
-            print (file_path + " already processed")
-            continue
+    with open(file_path, encoding="utf-8") as forum_file:
+        # Break file over many lines
+        data = forum_file.read()
 
-        with open(file_path, encoding="utf-8") as forum_file:
-            # Break file over many lines
-            data = forum_file.read()
+    print ()
+    while True:
+        status = get_changes(file_path, data)
+        if status:
+            return status
+        # Retrying.
+        pass
 
-        print ()
-        file_actions, status = get_changes(file_path, data)
 
-        while file_actions == status == None:
-            # revert: retry
-            file_actions, status = get_changes(file_path, data)
+def all_at_once():
+    for file_name in sorted(os.listdir(CACHE_DIR)):
+        if re.match(POST_REGEX, file_name):
+            fix_one_file(file_name)
 
-        if file_actions == "QUIT":
-            break
+
+if __name__ == "__main__":
+    all_at_once()

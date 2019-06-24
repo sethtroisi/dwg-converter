@@ -11,6 +11,8 @@ import tempfile
 from collections import Counter
 from bs4 import BeautifulSoup
 
+from story_fixer import fix_one_file
+
 #-----------------------
 
 DOWNLOAD_FIRST = False
@@ -61,7 +63,7 @@ JUMP_TEMPLATE = f'''
 # For POST_BODY_SECTION
 STORY_TEMPLATE = '''
 <div class="post">
-  <hr><p>
+  <hr><br/><br/>
   {jump_label}<i>Posted on {date}</i><br/><br/>
   {body}
 </div>
@@ -120,8 +122,8 @@ def create_filename(author, title, post_date):
     author = re.sub('[^A-Za-z0-9]', '', author)
     title = re.sub('[^A-Za-z0-9]', '', title)
     post_date = re.sub('[^A-Za-z0-9]', '', post_date)
-    filename = os.path.join(CACHE_DIRECTORY, author[:10] + title[:15] + post_date + ".html")
-    return(filename)
+    filename = cached_path(author[:10] + title[:15] + post_date + ".html")
+    return filename
 
 
 def strip_post_space(data):
@@ -133,7 +135,7 @@ def strip_post_space(data):
     return data
 
 
-def strip_comment(post, fn):
+def strip_comment(post, post_name):
     # Run this after Using story_fixer.py which will embed each DNA section in a DNA tag
     # This strips the text of each of those tagged sections (ensuring it wasn't changed when soup did cleanups)
     # from the post and returns that purged post and the purged sections.
@@ -162,7 +164,7 @@ def strip_comment(post, fn):
                 purged.append(dna.text)
                 break
         else:
-            assert False, ("Didn't find DNA to remove", fn, dna)
+            assert False, ("Didn't find DNA to remove", post_name, dna)
 
 
     return post, " | ".join(purged)
@@ -245,13 +247,15 @@ def format_new_post(title, author, post_date, post, is_final):
 
     return output_name
 
+def cached_path(filename):
+    return os.path.join(CACHE_DIRECTORY, filename)
 
 def get_file(cached_filename, file_is_local, url = ''):
     # this finds, caches, and opens a copy of a file.
     # file_is_local asserts that we should find it in our cache because e.g. we just created it
 
     # Check if we already downloaded & saved locally
-    cached_name = os.path.join(CACHE_DIRECTORY, cached_filename)
+    cached_name = cached_path(cached_filename)
 
     if os.path.exists(cached_name):
         with open(cached_name, "r", encoding="utf-8") as cached:
@@ -291,10 +295,19 @@ def get_post_msg_body(csv_line):
     msg_id = csv_line[msg_id_index]
     title = csv_line[title_index]
 
-    # This must be local, because it must have been story_fixed already.
-    # if not present toggle DOWNLOAD_FIRST = True and run.
-    post_fn = msg_id + ".soup.html"
-    page_data = get_file(post_fn, file_is_local=True)
+    fixed_post_fn = msg_id + ".soup.html"
+    if not os.path.exists(cached_path(fixed_post_fn)):
+        # Fix file at this time.
+        original_post_fn = msg_id + ".html"
+        if not os.path.exists(cached_path(original_post_fn)):
+            # Download file
+            assert get_file(original_post_fn, False, post_url)
+            print ("\t\tCached {} => {}".format(post_url, original_post_fn))
+
+        # Requires manual input to mark DNAs
+        fix_one_file(original_post_fn)
+
+    page_data = get_file(fixed_post_fn, file_is_local=True)
 
     # Fix an error by seth where tags must be lowercase.
     page_data = (page_data
@@ -315,17 +328,17 @@ def get_post_msg_body(csv_line):
 
     blurb = get_blurb(page_data)
 
-    post, comment_string = strip_comment(page_data, post_fn)
+    post, comment_string = strip_comment(page_data, fixed_post_fn)
 
     lower = post.lower()
     for trigger in ["a/n", "<dna", "author's note"]:
         # These have to be manually cleaned up by editing some files.
         start = lower.find(trigger)
-        assert start == -1, (post_fn, trigger, lower[start-10:start+10])
+        assert start == -1, (fixed_post_fn, trigger, lower[start-10:start+10])
 
 #   TODO print "manual inspect" warning.
 #    for trigger in ["to be continued", "the end\W", "\Wfin\W"]:
-#        assert not re.search(trigger, lower[-400:], re.I), (post_fn, trigger)
+#        assert not re.search(trigger, lower[-400:], re.I), (fixed_post_fn, trigger)
 
     # Remove <div> and then prune leading spaces + br tags at head/tail.
     post = strip_post_space(post[len(post_start_text):-len(post_end_text)])
@@ -426,7 +439,7 @@ def story_in_new_format(page_data, ignore_assert=True):
     if not final_lines[0].startswith(STORY_STATUS_MARKER):
         assert ignore_assert, ("First line doesn't start with <span...story-insertion-marker closing-status...", final_lines)
         return False
-    if not final_lines[1] == SEPERATOR_LINE:
+    if final_lines[1] not in (SEPERATOR_LINE, "<p><hr /><p>"):
         assert ignore_assert, ("Second line was not " + SEPERATOR_LINE, final_lines)
         return False
     if not final_lines[2].startswith((COPYRIGHT_PREFIX, OLD_COPYRIGHT_PREFIX, ANOTHER_COPYRIGHT_PREFIX)):
@@ -440,7 +453,7 @@ def ensure_new_story_format(file_name, page_data):
     if story_in_new_format(page_data):
         return page_data
 
-    cache_name = os.path.join(CACHE_DIRECTORY, file_name.split(".", 1)[0] + ".cache.html")
+    cache_name = cached_path(file_name.split(".", 1)[0] + ".cache.html")
     if os.path.exists(cache_name):
         with open(cache_name, encoding="utf-8") as f:
             return f.read()
@@ -596,9 +609,9 @@ if DOWNLOAD_FIRST:
 
         if action in ("Amend", "ArchiveNew", "AppendNew", "AppendArchive"):
             post_url = csv_line[post_url_index]
-            cache_name = msg_id + ".html"
-            assert get_file(cache_name, False, post_url)
-            print ("\t\tCached {} => {}".format(post_url, cache_name))
+            post_name = msg_id + ".html"
+            assert get_file(post_name, False, post_url)
+            print ("\t\tCached {} => {}".format(post_url, post_name))
     print("\nFiles fetched. Now run story extractor, then toggle DOWNLOAD_FIRST and rerun story archiver\n")
     sys.exit()
 
@@ -696,7 +709,7 @@ for i, csv_line in enumerate(csv_input):
             csv_line[blurb_index] = blurb
 
         #find the relevant file to append to which should now have an entry in the output CSV from previous post
-        if not title in csv_output: # see if it is there caseless and if so, correct current titles to match saved title
+        if title not in csv_output: # see if it is there caseless and if so, correct current titles to match saved title
             matches = [csv_output[key] for key in csv_output if str_equal(key, title)]
             assert len(matches) == 1, (title, matches)
             title = csv_line[title_index] = matches[0][title_index]
@@ -723,7 +736,7 @@ for i, csv_line in enumerate(csv_input):
 
         page_data = update_copyright(page_data, post_date)
 
-        output_file = os.path.join(CACHE_DIRECTORY, insertion_file)
+        output_file = cached_path(insertion_file)
         with open(output_file, "w", encoding="utf-8") as output_file:
             output_file.write(page_data)
 
@@ -781,12 +794,14 @@ for i, csv_line in enumerate(csv_input):
         page_data = re.sub(r'<!--mailto:.{1,50} -->', '', page_data, re.I)
 
         #insert the jump links first:
-        jump_string_date = datetime.datetime.strptime(post_date, "%Y-%m-%d")
-        jump_string_date_str = jump_string_date.strftime('%A %B %d, %Y')
-        jump_string = '\n<a href="#new{}">Jump to new as of {}</a><br/>'.format(
-            csv_line[post_date_index], jump_string_date_str)
+        jump_post_date = datetime.datetime.strptime(post_date, "%Y-%m-%d")
+        jump_date_str = jump_post_date.strftime('%A %B %d, %Y')
 
-        jump_label = '<a id="new{}"></a>'.format(post_date)
+        jump_new_date = post_date.replace("-", "")
+        jump_string = '\n<a href="#new{}">Jump to new as of {}</a><br/>'.format(
+            jump_date_str, jump_date_str)
+
+        jump_label = '<a id="new{}"></a>'.format(jump_date_str)
 
         assert JUMP_LINK_INSERTION_MARKER in page_data, "should have been tested"
         assert STORY_INSERTION_MARKER in page_data, "see above line"
@@ -794,8 +809,7 @@ for i, csv_line in enumerate(csv_input):
         if jump_string in page_data and jump_label in page_data:
             print("\tAppend already performed (already found {})".format(jump_label))
         else:
-            # remove any closing from existing file and append correct status to end of new:
-            #TODO ensure that this works correctly for both this and append to new stories.
+            # remove any story_status from existing file and append correct status to end of new:
             page_data = change_story_status(page_data, is_final)
 
             insertion_index =  page_data.index(STORY_INSERTION_MARKER)
@@ -822,7 +836,7 @@ for i, csv_line in enumerate(csv_input):
 
             new_page_data = update_copyright(new_page_data, post_date)
 
-            output_file = os.path.join(CACHE_DIRECTORY, insertion_filename)
+            output_file = cached_path(insertion_filename)
             with open(output_file, "w", encoding="utf-8") as output_file:
                 output_file.write(new_page_data)
 
