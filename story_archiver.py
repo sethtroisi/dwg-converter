@@ -15,7 +15,6 @@ from story_fixer import fix_one_file
 
 #-----------------------
 
-DOWNLOAD_FIRST = False
 ONLY_A_FEW = False
 # TODO need to toggle off for final run.
 MOVING_FAST_BREAKING_THINGS = False
@@ -90,6 +89,7 @@ ITALIC_END_TAG = "</i>"
 BOLD_TAG = "<b>"
 BOLD_END_TAG = "</b>"
 
+EMPTY_LINE = "<p>"
 SEPERATOR_LINE = "<p><hr><p>"        # this draws visual horizontal lines.
 
 #-----------------------
@@ -221,9 +221,6 @@ def format_new_post(title, author, post_date, post, is_final):
         date=post_date,
         body=post)
 
-    #TODO Note that story_data might already contain the author's closing words,
-    # if so, need to not duplicate them. Do a search in last ~100 chars of story body for the words in last
-
     closing_words = CLOSING_THE_END if is_final else CLOSING_TBC
     closing_section = STORY_STATUS_MARKER + closing_words + STORY_STATUS_MARKER_CLOSE
 
@@ -336,7 +333,8 @@ def get_post_msg_body(csv_line):
         start = lower.find(trigger)
         assert start == -1, (fixed_post_fn, trigger, lower[start-10:start+10])
 
-#   TODO print "manual inspect" warning.
+#    need to look for author provided ending status.
+#    Now assume that Human will clean that up in story fixer step previous to here
 #    for trigger in ["to be continued", "the end\W", "\Wfin\W"]:
 #        assert not re.search(trigger, lower[-400:], re.I), (fixed_post_fn, trigger)
 
@@ -429,9 +427,9 @@ def story_in_new_format(page_data, ignore_assert=True):
         assert ignore_assert, (story_status_index, len(page_data))
         return False
 
-    #TODO - commented these out until the closing duplication has been fixed:
-#    assert 'To Be Continue' not in page_data[:story_status_index], page_data[story_status_index-100:]
-#    assert 'The End' not in page_data[:story_status_index], page_data[story_status_index-100:]
+    #commented these out until the closing duplication has been fixed - is this now working again??:
+    assert 'To Be Continued' not in page_data[:story_status_index], page_data[story_status_index-100:]
+    assert 'The End' not in page_data[:story_status_index], page_data[story_status_index-100:]
 
     final_lines =  page_data[story_status_index:].split("\n")
     # All non-empty lines near the end of the file
@@ -535,7 +533,7 @@ CURRENT_STORY_STATUS_RE = re.compile(
     re.escape(STORY_STATUS_MARKER_CLOSE))
 
 # This is used to update the story ending status of all files created in here.
-#TODO: it needs to take into account that the author may have provided a closing of their own in the post.
+# author may have provided a closing of their own in the post but human should have removed that in story fixer step
 def change_story_status(page_data, is_final):
     current = CURRENT_STORY_STATUS_RE.search(page_data)
     assert current, "We didn't find STORY_STATUS_MARKER!"
@@ -547,10 +545,9 @@ def change_story_status(page_data, is_final):
         current.group(0), # The entire match STORY_STATUS_MARKER + current_text + STORY_STATUS_MARKER_CLOSE
         STORY_STATUS_MARKER + new_status + STORY_STATUS_MARKER_CLOSE)
 
-    #TODO: after the replace, but before the return,
+    #TODO: after the replace, but before the return, should we
     # do a lower case search of the 70 chars before the STORY_STATUS_MARKER for {To Be Continued, The End, Fin}
-    #if not found, return
-    #if found, have the human take corrective action either substituting the author's for ours OR deleting it.
+    # to verify that there will be no unwanted duplication?
 
 ########## MAIN ##############
 
@@ -599,7 +596,11 @@ csv_output["header"] = header + ["New Filename"]
 tbd_output = []     # this file will need to be processed by human and then csv_output file manually updated
 tbd_output.append(header + ["New Filename"])
 
-if DOWNLOAD_FIRST:
+download_first = ""
+while download_first not in ("y", "n"):
+    download_first = input("Are there posts to download? (y/n)")
+
+if download_first == 'y':
     # Download all forum messages for story_fixer.py
     for i, csv_line in enumerate(csv_input):
         assert len(csv_line) == len(header), (len(header), csv_line)
@@ -612,8 +613,6 @@ if DOWNLOAD_FIRST:
             post_name = msg_id + ".html"
             assert get_file(post_name, False, post_url)
             print ("\t\tCached {} => {}".format(post_url, post_name))
-    print("\nFiles fetched. Now run story extractor, then toggle DOWNLOAD_FIRST and rerun story archiver\n")
-    sys.exit()
 
 toAmend = 0
 archivedNew = 0
@@ -626,7 +625,6 @@ for i, csv_line in enumerate(csv_input):
     action = csv_line[action_index]
     category = csv_line[category_index]    #note that this value could be null
     msg_id = csv_line[msg_id_index]
-    #TODO: we need to ensure that we don't duplicate the author's closing - we have duplicate "The End"s
     is_final = csv_line[final_post_index].lower().startswith('y')
 
     # Archived entries shouldn't have a action:
@@ -653,7 +651,7 @@ for i, csv_line in enumerate(csv_input):
         page_data = get_file(msg_id + ".html", False, post_url)
         #NOTE: have no way to know which file (archived or new) is being amended, so let human fetch both the post and archived text
         #or could groom the csv to include the correct info...
-        print('Amendment({}) - ***** HUMAN INTERVENTION required: "{}"  {} modify file and update CSV'.format(i+2, post_date, title))
+        print('\nAMENDMENT({}) - ***** HUMAN INTERVENTION required: "{}"  {} modify file and update CSV'.format(i+2, post_date, title))
 
         #Save all the data about this story so human can copy it to csv_output when amendment is complete:
         tbd_line = csv_line[:last_csv_input_index+1] + ["TBD"]     #we don't have a file to modify, human will have to add it.
@@ -669,7 +667,7 @@ for i, csv_line in enumerate(csv_input):
         if ONLY_A_FEW and archivedNew >= 2:
             continue
 
-        print('ArchiveNew({}): "{}"'.format(i+2, title))
+        print('\nARCHIVE NEW({}): "{}"'.format(i+2, title))
         message_body, blurb = get_post_msg_body(csv_line)
         new_filename = format_new_post(
             title, author,
@@ -699,7 +697,7 @@ for i, csv_line in enumerate(csv_input):
         if ONLY_A_FEW and appendedNew >= 1:
             continue
 
-        print('AppendNew({}): {}'.format(i+2, title))
+        print('\nAPPEND NEW({}): {}'.format(i+2, title))
 
         #fetch post text to append to file created previously during this archive:
         message_body, blurb = get_post_msg_body(csv_line)
@@ -730,9 +728,9 @@ for i, csv_line in enumerate(csv_input):
 
         #We don't add jump links for these because no one has yet read this non-existant file!
         story_data = STORY_TEMPLATE.format(jump_label='', date=post_date, body=message_body,)
-        #TODO: verify that the correct white space gets inserted between posts.
+        #this is where the white space gets inserted between posts
         page_data = page_data.replace(STORY_INSERTION_MARKER,
-                                      story_data + "\n" + STORY_INSERTION_MARKER)
+                                      EMPTY_LINE + EMPTY_LINE + story_data + "\n" + STORY_INSERTION_MARKER)
 
         page_data = update_copyright(page_data, post_date)
 
@@ -752,7 +750,7 @@ for i, csv_line in enumerate(csv_input):
         if ONLY_A_FEW and appendedArchive >= 2:
             continue
 
-        print('AppendArchive({}): {}'.format(i+2, title))
+        print('\nAPPEND ARCHIVE({}): {}'.format(i+2, title))
 
         #fetch post text to append to archived file:
         message_body, blurb = get_post_msg_body(csv_line)
@@ -770,7 +768,7 @@ for i, csv_line in enumerate(csv_input):
                    print("\tERROR: appending with non-matching author names: {} {}):".format(csv_line[author_index], test_line[author_index]))
                    assert False
                archive_url = test_line[archive_url_index]
-               print('\t Appending to: {}'.format(archive_url))
+               print('\t APPENDING to: {}'.format(archive_url))
                break
         assert archive_url
         #print('Appending({}): ***** ERROR: no archive file for {}'.format(i+2, csv_line[title_index]))
@@ -829,9 +827,10 @@ for i, csv_line in enumerate(csv_input):
                 # till the first append, but only add it the 1st append.
                 page_data = page_data.replace(JUMP_SECTION, JUMP_SECTION + SEPERATOR_LINE)
 
+            # this is the place to modify white space between posts.
             new_page_data = (page_data
                 .replace(JUMP_LINK_INSERTION_MARKER, jump_string + "\n" + JUMP_LINK_INSERTION_MARKER)
-                .replace(STORY_INSERTION_MARKER, story_data + "\n" +  STORY_INSERTION_MARKER)
+                .replace(STORY_INSERTION_MARKER, EMPTY_LINE + EMPTY_LINE + story_data + "\n" +  STORY_INSERTION_MARKER)
             )
 
             new_page_data = update_copyright(new_page_data, post_date)
