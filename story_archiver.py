@@ -797,9 +797,9 @@ for i, csv_line in enumerate(csv_input):
 
         jump_new_date = post_date.replace("-", "")
         jump_string = '\n<a href="#new{}">Jump to new as of {}</a><br/>'.format(
-            jump_date_str, jump_date_str)
+            post_date, jump_date_str)
 
-        jump_label = '<a id="new{}"></a>'.format(jump_date_str)
+        jump_label = '<a id="new{}"></a>'.format(post_date)
 
         assert JUMP_LINK_INSERTION_MARKER in page_data, "should have been tested"
         assert STORY_INSERTION_MARKER in page_data, "see above line"
