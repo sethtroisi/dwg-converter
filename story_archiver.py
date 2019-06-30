@@ -62,8 +62,8 @@ JUMP_TEMPLATE = f'''
 # For POST_BODY_SECTION
 STORY_TEMPLATE = '''
 <div class="post">
-  <hr><br/><br/>
-  {jump_label}<i>Posted on {date}</i><br/><br/>
+  <hr><br/>
+  {jump_label}\n<i>Posted on {date}</i><br/><br/>
   {body}
 </div>
 '''
@@ -136,7 +136,7 @@ def strip_post_space(data):
 
 
 def strip_comment(post, post_name):
-    # Run this after Using story_fixer.py which will embed each DNA section in a DNA tag
+    # Use this after story_fixer.py which will embed each DNA section in a DNA tag
     # This strips the text of each of those tagged sections (ensuring it wasn't changed when soup did cleanups)
     # from the post and returns that purged post and the purged sections.
 
@@ -159,13 +159,11 @@ def strip_comment(post, post_name):
             match = re.search(text, original)
             if match:
                 post = post.replace(match.group(), "", 1)
-
-                print('\t REMOVED: "{}"'.format(match.group().replace("\n", "")))
+                #print('\t REMOVED: "{}"'.format(match.group().replace("\n", "")))
                 purged.append(dna.text)
                 break
         else:
             assert False, ("Didn't find DNA to remove", post_name, dna)
-
 
     return post, " | ".join(purged)
 
@@ -197,27 +195,24 @@ def get_blurb(post):
     blurb = find_keyword_string(local_post, "Blurb:", True)
     if not blurb:
         blurb = find_keyword_string(local_post, "Blurb", True)
-# TODO: some authors use summary for the blurb,
-#   unfortunately, others use summary on subsequent posts to summarize situation so far...
-#   so really can use "summary" only if don't already  have a blurb and we don't know that here.
-#   if not blurb:
-#       blurb = find_keyword_string(local_post, "Summary:", True)
-#    if not blurb:
-#        blurb = find_keyword_string(local_post, "Summary", True)
-         # this could match something in the text but since we're not stripping it here, will go with it
-    #if blurb:
-        #print('\t Blurb: ' + blurb)
+    # unfortunately, some authors use summary for the blurb,
+    # but others use summary on subsequent posts to summarize situation so far...
+    # so can't rely on "summary" as a keyword. Will have to do those manually - for all empty
+    # blurbs in the output CSV, find some text and store it in the input CSV, then rerun.
     return blurb
 
 
 def format_new_post(title, author, post_date, post, is_final):
     # See ARCHIVE_TEMPLATE for template and layout
 
-    with open(ARCHIVE_TEMPLATE) as template_file:
+    with open(ARCHIVE_TEMPLATE, encoding='utf-8') as template_file:
         template = template_file.read()
 
+    jump_link_string, jump_label = create_jump_lines(post_date, msg_id)
+    #TODO: for now, make jump links invisible in new stories but maybe rethink this:
+    jump_link_string = '<!-- ' + jump_link_string +' -->'
     story_data = STORY_TEMPLATE.format(
-        jump_label="",
+        jump_label=jump_label,
         date=post_date,
         body=post)
 
@@ -227,9 +222,12 @@ def format_new_post(title, author, post_date, post, is_final):
     new_story = (template
         .replace("$TITLE", title)
         .replace("$AUTHOR", author)
-        .replace("$JUMP_SECTION", JUMP_TEMPLATE.format(jump_link=""))
+        .replace("$JUMP_SECTION", JUMP_TEMPLATE.format(jump_link=jump_link_string))
         .replace("$POST_BODY_SECTION", story_data)
         .replace("$CLOSING_SECTION", closing_section)
+        #TODO: these two are temp code to make styles look correct in local work, remove before done:
+        #.replace('/style/stories.css', 'style/stories.css')
+        #.replace('/derby/back.gif', 'derby/back.gif')
         #NOTE Seth had put this backlink in to jump to the original post but Margaret and I don't like that
         #.replace("$OGLINK", '<a href="{}.html">originalpost</a><br/>'.format(msg_id))
         .replace("$COPYRIGHT_YEAR", post_date[:4]))
@@ -306,7 +304,11 @@ def get_post_msg_body(csv_line):
 
     page_data = get_file(fixed_post_fn, file_is_local=True)
 
+    #look for blurb before it might get stripped with comments
+    blurb = get_blurb(page_data)
+
     # Fix an error by seth where tags must be lowercase.
+    # TODO is this still relevant??
     page_data = (page_data
         .replace('<DNA>', '<dna>')
         .replace('</DNA>', '</dna>')
@@ -322,8 +324,6 @@ def get_post_msg_body(csv_line):
     assert page_data.startswith(post_start_text), (page_data[:100])
     assert page_data.count(post_end_text) >= 1
     assert page_data.endswith(post_end_text), (page_data[-100:],)
-
-    blurb = get_blurb(page_data)
 
     post, comment_string = strip_comment(page_data, fixed_post_fn)
 
@@ -408,6 +408,7 @@ def html_cleanup(page_data):
 
     # TODO try out removing all </p> and see if visually different (will help out with some problems around <i>/<b>)
     # TODO try replacing 3+ br with 2.
+    # BLT: did this happen?
 
     return page_data
 
@@ -545,9 +546,22 @@ def change_story_status(page_data, is_final):
         current.group(0), # The entire match STORY_STATUS_MARKER + current_text + STORY_STATUS_MARKER_CLOSE
         STORY_STATUS_MARKER + new_status + STORY_STATUS_MARKER_CLOSE)
 
-    #TODO: after the replace, but before the return, should we
-    # do a lower case search of the 70 chars before the STORY_STATUS_MARKER for {To Be Continued, The End, Fin}
+    #TODO: should we do a lower case search of the 70 chars before the STORY_STATUS_MARKER
+    # for {To Be Continued, The End, Fin}
     # to verify that there will be no unwanted duplication?
+
+def create_jump_lines(post_date, msg_id):
+    #creates html for jump_link_string to "take" reader to jump_label
+    JUMP_LABEL_TEXT = '<a id="new{}-{}"></a>'
+    JUMP_LINK_STRING_TEXT = '<a href="#new{}-{}">Jump to new as of {}</a><br/>'
+    jump_post_date = datetime.datetime.strptime(post_date, "%Y-%m-%d")
+    jump_date_str = jump_post_date.strftime('%A %B %d, %Y')
+    jump_new_date = post_date.replace("-", "")
+    jump_link_string = JUMP_LINK_STRING_TEXT.format(
+        post_date, msg_id, jump_date_str)
+    jump_label = JUMP_LABEL_TEXT.format(post_date, msg_id)
+    return jump_link_string, jump_label
+
 
 ########## MAIN ##############
 
@@ -618,6 +632,8 @@ toAmend = 0
 archivedNew = 0
 appendedNew = 0
 appendedArchive = 0
+extraneousCSVEntries = 0
+
 for i, csv_line in enumerate(csv_input):
     # Verify this line has correct number of columns
     assert len(csv_line) == len(header), (len(header), csv_line)
@@ -664,7 +680,7 @@ for i, csv_line in enumerate(csv_input):
 
     elif action == "ArchiveNew":
 
-        if ONLY_A_FEW and archivedNew >= 2:
+        if ONLY_A_FEW and archivedNew >= 5:
             continue
 
         print('\nARCHIVE NEW({}): "{}"'.format(i+2, title))
@@ -678,33 +694,34 @@ for i, csv_line in enumerate(csv_input):
         assert title not in csv_output or csv_output[title][action_index] == 'dna', (title, csv_output[title])
 
         #Save all the (new) data about this story (use stripped title) and the file (stripped of it's path name) where the new story resides:
-        if blurb:
+        if blurb:   # save any new blurb over whatever might be in the input file:
             csv_line[blurb_index] = blurb
-        else:
+            #print("blurb: " + csv_line[blurb_index])
+        else:   # provide placeholder but anything that already pre-exists in the input file!
             if not csv_line[blurb_index]:
                 csv_line[blurb_index] = "tbd"
 
         csv_output[title] = csv_line[:last_csv_input_index+1] + [new_filename[len(CACHE_DIRECTORY):]]
         csv_output[title][title_index] = title
         csv_output[title][creation_date_index] = csv_line[post_date_index]
-        #print(csv_output[title])
 
         archivedNew += 1
 
     elif action == "AppendNew":
          #In this case, we know the format of the file and thus are free to shove stuff into it without care.
 
-        if ONLY_A_FEW and appendedNew >= 1:
+        if ONLY_A_FEW and appendedNew >= 5:
             continue
 
         print('\nAPPEND NEW({}): {}'.format(i+2, title))
 
         #fetch post text to append to file created previously during this archive:
         message_body, blurb = get_post_msg_body(csv_line)
+
         if blurb:
-            if csv_line[blurb_index]:
-                print("\tFOUND NEW BLURB: ")
-            csv_line[blurb_index] = blurb
+            if csv_output[title][blurb_index]:
+                print("\tFOUND NEW BLURB: " + blurb)
+            csv_output[title][blurb_index] = blurb
 
         #find the relevant file to append to which should now have an entry in the output CSV from previous post
         if title not in csv_output: # see if it is there caseless and if so, correct current titles to match saved title
@@ -726,17 +743,22 @@ for i, csv_line in enumerate(csv_input):
         # deal with To Be Continued and The End
         page_data = change_story_status(page_data, is_final)
 
-        #We don't add jump links for these because no one has yet read this non-existant file!
-        story_data = STORY_TEMPLATE.format(jump_label='', date=post_date, body=message_body,)
+        #Add jump labels:
+        jump_link_string, jump_label = create_jump_lines(post_date, msg_id)
+        #TODO: for now, make jump links invisible but maybe rethink this:
+        jump_link_string = '<!-- ' + jump_link_string +' -->'
+        story_data = STORY_TEMPLATE.format(jump_label=jump_label, date=post_date, body=message_body,)
         #this is where the white space gets inserted between posts
-        page_data = page_data.replace(STORY_INSERTION_MARKER,
-                                      EMPTY_LINE + EMPTY_LINE + story_data + "\n" + STORY_INSERTION_MARKER)
+        new_page_data = (page_data
+            .replace(JUMP_LINK_INSERTION_MARKER, jump_link_string +'\n' + JUMP_LINK_INSERTION_MARKER)
+            .replace(STORY_INSERTION_MARKER, EMPTY_LINE + EMPTY_LINE + story_data + "\n" +  STORY_INSERTION_MARKER)
+            )
 
-        page_data = update_copyright(page_data, post_date)
+        new_page_data = update_copyright(new_page_data, post_date)
 
         output_file = cached_path(insertion_file)
         with open(output_file, "w", encoding="utf-8") as output_file:
-            output_file.write(page_data)
+            output_file.write(new_page_data)
 
         #update any necessary story data
         csv_output[title][post_date_index] = csv_line[post_date_index]
@@ -755,8 +777,8 @@ for i, csv_line in enumerate(csv_input):
         #fetch post text to append to archived file:
         message_body, blurb = get_post_msg_body(csv_line)
         if blurb:
-            print("\tFOUND NEW BLURB: ")
-            csv_line[blurb_index] = blurb
+            print("\tFOUND NEW BLURB: " + blurb)
+            #blurb will get saved to the output_csv when we find the appropriate entry below
 
         #Determine the correct associated archive file to fetch - should be first CSV entry with matching title:
         archive_url = ''
@@ -781,8 +803,8 @@ for i, csv_line in enumerate(csv_input):
         page_data = ensure_new_story_format(insertion_filename, page_data)
 
         #TODO: this is temp code to make styles look correct in local work, remove before done:
-        page_data = page_data.replace('/style/stories.css', 'style/stories.css')
-        page_data = page_data.replace('/derby/back.gif', 'derby/back.gif')
+        #page_data = page_data.replace('/style/stories.css', 'style/stories.css')
+        #page_data = page_data.replace('/derby/back.gif', 'derby/back.gif')
 
         charset_info = page_data.find('<meta charset="utf-8">')
         if charset_info < 0:
@@ -792,19 +814,12 @@ for i, csv_line in enumerate(csv_input):
         page_data = re.sub(r'<!--mailto:.{1,50} -->', '', page_data, re.I)
 
         #insert the jump links first:
-        jump_post_date = datetime.datetime.strptime(post_date, "%Y-%m-%d")
-        jump_date_str = jump_post_date.strftime('%A %B %d, %Y')
-
-        jump_new_date = post_date.replace("-", "")
-        jump_string = '\n<a href="#new{}">Jump to new as of {}</a><br/>'.format(
-            post_date, jump_date_str)
-
-        jump_label = '<a id="new{}"></a>'.format(post_date)
+        jump_link_string, jump_label = create_jump_lines(post_date, msg_id)
 
         assert JUMP_LINK_INSERTION_MARKER in page_data, "should have been tested"
         assert STORY_INSERTION_MARKER in page_data, "see above line"
 
-        if jump_string in page_data and jump_label in page_data:
+        if jump_link_string in page_data and jump_label in page_data:
             print("\tAppend already performed (already found {})".format(jump_label))
         else:
             # remove any story_status from existing file and append correct status to end of new:
@@ -818,7 +833,7 @@ for i, csv_line in enumerate(csv_input):
             assert insertion_index and insertion_index > (len(page_data)- FINAL_SECTION_LENGTH_MAX)
 
             story_data = STORY_TEMPLATE.format(
-                jump_label=jump_label + "\n",
+                jump_label=jump_label,
                 date=post_date,
                 body=message_body)
 
@@ -829,7 +844,7 @@ for i, csv_line in enumerate(csv_input):
 
             # this is the place to modify white space between posts.
             new_page_data = (page_data
-                .replace(JUMP_LINK_INSERTION_MARKER, jump_string + "\n" + JUMP_LINK_INSERTION_MARKER)
+                .replace(JUMP_LINK_INSERTION_MARKER, jump_link_string +'\n' + JUMP_LINK_INSERTION_MARKER)
                 .replace(STORY_INSERTION_MARKER, EMPTY_LINE + EMPTY_LINE + story_data + "\n" +  STORY_INSERTION_MARKER)
             )
 
@@ -839,8 +854,8 @@ for i, csv_line in enumerate(csv_input):
             with open(output_file, "w", encoding="utf-8") as output_file:
                 output_file.write(new_page_data)
 
-        #TODO: should we copy the entire csv_line?
-        if title not in csv_output:     # start with the archived story data
+        #TODO: should we copy the entire input csv_line?
+        if title not in csv_output:     # start with the archived story data from matching entry
             #print('\tAdding title to csv output', title)
             csv_output[title] = test_line[:last_csv_input_index+1] + [insertion_filename]
             csv_output[title][action_index] = csv_line[action_index]
@@ -848,7 +863,6 @@ for i, csv_line in enumerate(csv_input):
 
         csv_output[title][post_date_index] = csv_line[post_date_index]
         csv_output[title][final_post_index] = csv_line[final_post_index]
-
         if blurb:
             csv_output[title][blurb_index] = blurb
 
@@ -859,20 +873,21 @@ for i, csv_line in enumerate(csv_input):
     elif action == "no-op":
         #these are extraneous posts, for example, previously processed posts,
         # ignore here, but they will get archived from forum
-
         #print('No-op({}): "{}" by {}'.format(i+2, title, author))
         continue
     elif action == "delete":
         #garbage post that is ignored here and deleted from forum
-        print('Delete this post({}): "{}" by {}'.format(i+2, title, author))
+        print('\nDelete this post({}): "{}" by {}'.format(i+2, title, author))
         if title not in csv_output:
             csv_output[title] = csv_line[:last_csv_input_index+1] + ['']
+            extraneousCSVEntries += 1
         continue
     elif action == "dna":
         #Do Not Archive, so, duh, do nothing here, do they get removed from forum archive?
-        print('DNA this post({}): "{}" by {}'.format(i+2, title, author))
+        print('\nDNA this post({}): "{}" by {}'.format(i+2, title, author))
         if title not in csv_output:
             csv_output[title] = csv_line[:last_csv_input_index+1] + ['']
+            extraneousCSVEntries += 1
         continue
     else:
         print("unhandled action:", action)
@@ -897,13 +912,12 @@ try:
 
 except IOError:
     print("I/O error")
-
-# len - 1 is for the header line.
+# len-1 is for the header line, and -extraneousCSVEntries is for non story entries
 print("""
 Archive complete:
     {} story files created
-    {} Amendments must be completed manually (see log or CSV file)
+    {} Amendments must be completed manually (refer to log or CSV file)
     {} New Stories (with {} Updates to those)
-    {} Archive Updates ({} stories)""".format(
-    len(csv_output)-1, toAmend, archivedNew, appendedNew,
-    appendedArchive, (len(csv_output)-1-archivedNew)))
+    {} Archived stories updated ({} posts)""".format(
+    len(csv_output)-extraneousCSVEntries-1, toAmend, archivedNew, appendedNew,
+    len(csv_output)-archivedNew-extraneousCSVEntries-1, appendedArchive))
