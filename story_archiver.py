@@ -160,6 +160,7 @@ def strip_comment(post, post_name):
             if match:
                 post = post.replace(match.group(), "", 1)
                 #print('\t REMOVED: "{}"'.format(match.group().replace("\n", "")))
+                assert len(dna.text) < 2500, (len(dna.text), dna.text, post_name)
                 purged.append(dna.text)
                 break
         else:
