@@ -4,7 +4,7 @@
 
 
 backup/
-cache/
+#cache/
 
 stories/
 stories_raw/
