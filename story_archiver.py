@@ -911,6 +911,8 @@ try:
        writer.writerows(tbd_output)
 
 
+    write_inserts(csv_output.values())
+
 except IOError:
     print("I/O error")
 # len-1 is for the header line, and -extraneousCSVEntries is for non story entries
