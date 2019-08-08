@@ -34,6 +34,9 @@ sql_schema =  """
   PRIMARY KEY (title_id)
 """
 
+def bad_sql_escape(text):
+    return "'" + text.strip().replace("'", "''") + "'"
+
 def generate_insert(line):
     genre_types = {"epilogue": "Epi", "fantasia": "Fant"}
     # Epi Fant ANI
@@ -43,6 +46,9 @@ def generate_insert(line):
     # northanger, sense, pride, emma, mansfield, persuasion, juvenilia, misc
     genre_bools = "NULL, NULL, 1, NULL, NULL, NULL, NULL, NULL"
     genera = "NULL"
+
+    # This is how sql escapes things
+    blurp = bad_sql_escape(line[12])
 
     completed = 0 if line[10] == 'N' else 1
 
@@ -54,8 +60,8 @@ def generate_insert(line):
 
     insert_sql = f"""
 INSERT INTO dwg_stories VALUES (
-    {line[6]!r}, NULL, '/derby/2019/{line[16]}', {line[4]!r}, {line[3]}, {gen_type!r},
-    {line[12].strip()!r},
+    {line[5]!r}, NULL, '/derby/2019/{line[16]}', {line[4]!r}, {line[3]}, {gen_type!r},
+    {blurp},
     {genre_bools}, {line[1]!r}, {line[0]!r}, NULL, {completed}, {genera}, {base_url!r}, {sub_dir!r}, {multipart}
 );"""
     return insert_sql
@@ -78,11 +84,13 @@ with open(OUTPUT_SQL_PATH, "w") as sql_file:
             insert_sql = generate_insert(line)
             print (insert_sql)
             sql_file.write(insert_sql + "\n")
+
         elif action == "AppendArchive":
             insert_sql = generate_insert(line)
             # Same thing but be careful
             #print ("Skipping", action, line[15], "for now")
             pass
+
         elif action in ("dna", "delete"):
             #print ("Skipping", line[15], "for now")
             #print (action)
