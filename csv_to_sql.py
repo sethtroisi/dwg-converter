@@ -44,7 +44,17 @@ def generate_insert(line):
     gen_type = genre_types[line[7]]
 
     # northanger, sense, pride, emma, mansfield, persuasion, juvenilia, misc
-    genre_bools = "NULL, NULL, 1, NULL, NULL, NULL, NULL, NULL"
+    genre_bool_lookup = {
+        "NA":   "1, NULL, NULL, NULL, NULL, NULL, NULL, NULL",
+        "S&S":  "NULL, 1, NULL, NULL, NULL, NULL, NULL, NULL",
+        "P&P":  "NULL, NULL, 1, NULL, NULL, NULL, NULL, NULL",
+        "Em":   "NULL, NULL, NULL, 1, NULL, NULL, NULL, NULL",
+        "MP":   "NULL, NULL, NULL, NULL, 1, NULL, NULL, NULL",
+        "Per":  "NULL, NULL, NULL, NULL, NULL, 1, NULL, NULL",
+        "Misc": "NULL, NULL, NULL, NULL, NULL, NULL, NULL, 1",
+    }
+    assert line[11] in genre_bool_lookup, (line[11], line)
+    genre_bools = genre_bool_lookup[line[11]]
     genera = "NULL"
 
     # This is how sql escapes things
@@ -79,6 +89,7 @@ assert headers == headers_test, headers
 with open(OUTPUT_SQL_PATH, "w") as sql_file:
     for line in lines:
         action = line[6]
+        print (action, line[11], line[5])
 
         if action == "ArchiveNew":
             insert_sql = generate_insert(line)
@@ -86,7 +97,7 @@ with open(OUTPUT_SQL_PATH, "w") as sql_file:
             sql_file.write(insert_sql + "\n")
 
         elif action == "AppendArchive":
-            insert_sql = generate_insert(line)
+            #insert_sql = generate_insert(line)
             # Same thing but be careful
             #print ("Skipping", action, line[15], "for now")
             pass
