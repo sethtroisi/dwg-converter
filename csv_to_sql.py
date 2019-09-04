@@ -60,7 +60,7 @@ def generate_insert(line):
     # This is how sql escapes things
     blurp = bad_sql_escape(line[12])
 
-    completed = 0 if line[10] == 'N' else 1
+    completed = 0 if line[10].upper() == 'N' else 1
 
     base_url = os.path.splitext(os.path.basename(line[16]))[0]
     sub_dir = "2019"
@@ -86,23 +86,30 @@ headers = lines.pop(0)
 print ("csv", len(lines))
 assert headers == headers_test, headers
 
+from collections import Counter
+c = Counter()
 with open(OUTPUT_SQL_PATH, "w") as sql_file:
     for line in lines:
         action = line[6]
-        print (action, line[11], line[5])
+        c[action] += 1
 
         if action == "ArchiveNew":
             insert_sql = generate_insert(line)
-            print (insert_sql)
+            #print (insert_sql)
             sql_file.write(insert_sql + "\n")
 
         elif action == "AppendArchive":
             #insert_sql = generate_insert(line)
             # Same thing but be careful
-            #print ("Skipping", action, line[15], "for now")
+            print ("Skipping", action, line[14], "for now")
             pass
 
         elif action in ("dna", "delete"):
-            #print ("Skipping", line[15], "for now")
+            print ("Skipping", action, line[14], "for now")
             #print (action)
             pass
+
+        else:
+            print(action)
+
+print(c)
