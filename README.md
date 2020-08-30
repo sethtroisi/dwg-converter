@@ -1,6 +1,6 @@
 # dwg-converter
 Scripts to help convert forum posts to stories
-in process of update 9/2020
+in process of update 9/2020 - blt
 
 This whole repository is rapidly changing. The documentation is out of date or wrong in many places, sorry.
 
