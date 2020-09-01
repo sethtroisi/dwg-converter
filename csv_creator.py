@@ -17,7 +17,7 @@ import sys
 #-----------------------
 
 # TODO need to toggle off for final run.
-ONLY_A_FEW = True
+ONLY_A_FEW = False
 MOVING_FAST_BREAKING_THINGS = False
 
 #------------------------
@@ -48,10 +48,6 @@ num_stories_entries = 0
 dwg_url_prefix = "https://www.dwiggie.com"
 post_url_prefix = "https://www.dwiggie.com/phorum/read.php?5,"
 
-# the intermediate data structure in which to collect our data - a list of lists, 
-# we aren't doing any processing so don't need to access the indiv values inside, and need all the fields to create the CSV.
-output_csv = []
-next_output_csv_index = 0;
 #Output CSV file will have columns with the names/order specified here:
 #TODO have 3 urls, only need 2 - e.g. URL and archive real url are related, omit former?
 #TODO posting json contains a "forum_id", and datestamp - are they relevant?? ignore for now
@@ -84,6 +80,12 @@ blurb_index=18
 author_id_index = 19
 short_url_index=20
 last_csv_input_index=20
+
+# the intermediate data structure in which to collect our data - a list of lists, 
+# doing no processing so don't need to access the indiv values inside, and need all fields present to create the CSV.
+output_csv = []
+output_csv.append(csv_header)
+next_output_csv_index = 1;
 
 # prompt for json input filenames and output csv filename using defaults:
 input_post_json_filename = input("Specify Input Post info file (default:{})?  ".format(INPUT_POST_JSON_FILENAME))
@@ -144,6 +146,9 @@ with open(input_stories_json_filename) as json_file:
             else:    # this is the array that contains 1 dict per story
                 for entry in json_file_data[key]:
                     #TODO is it okay to assume that the fields are all there or do I need to verify each?
+                    if not entry["story_url"]:
+                        print("URL missing from entry {}, title id: {} in stories.json".format(num_stories_entries, entry["title_id"]))
+                        continue
                     output_csv.append([ \
                           entry["last_update"]   
                         , entry["created"] 
@@ -171,19 +176,18 @@ with open(input_stories_json_filename) as json_file:
                     if ONLY_A_FEW and num_stories_entries >= 5:
                         break 
  
-#  this was from an example, determine what this means and thus if I need to do similar:
+#for i in range(next_output_csv_index):
+#        print("CSV Entry({}): {}".format(i, output_csv[i]))
+
+try:
+   with open(output_csv_filename, "w", newline='') as csv_file:
+      writer = csv.writer(csv_file)
+      writer.writerows(output_csv)
+except IOError:
+    print("I/O error")
+
+# TODO this was from an example, for dicts? determine what this means and thus if I need to do similar:  
 # print("Extr:", row["color"], row.get("is_dwg", "NOT PRESENT")) # for fields maybe not present you get(field_name, DEFAULT)
-
-# TODO: Open and Write out the header and then data to the output csv file
-for i in range(next_output_csv_index):
-        print("CSV Entry({}): {}".format(i, output_csv[i]))
-
-#try:
-#   with open(output_csv_filename, "w", newline='') as csv_file:
-#      writer = csv.writer(csv_file)
-#       writer.writerows(csv_output.values())
-#except IOError:
-#    print("I/O error")
   
 print("""CSV file creation complete:
     {} new posts to process
