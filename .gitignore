@@ -2,10 +2,13 @@
 *.csv.tbd
 *.json
 
-
+# virtual environment files
+venv/
 backup/
-#cache/
+cache/
+.idea/
 
+dwg-final/
 stories/
 stories_raw/
 story_backup/
