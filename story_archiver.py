@@ -1,5 +1,6 @@
 # -*- coding: utf8 -*-
 import csv
+import json
 import os.path
 import urllib.request
 import datetime
@@ -17,36 +18,57 @@ from story_fixer import fix_one_file
 
 ONLY_A_FEW = False
 # TODO need to toggle off for final run.
-MOVING_FAST_BREAKING_THINGS = False
+MOVING_FAST_BREAKING_THINGS = True
+
+#-----------------------
+
+ARCHIVE_TEMPLATE = "templates/story_archive_template.html"
+CACHE_DIRECTORY = "cache/"      #both inbound and outbound files end up here
 
 #------------------------
 
-INPUT_CSV_PATH = "dwg - posts.csv"
-OUTPUT_CSV_PATH="dwg_archive_results.csv"
+INPUT_CSV_FILENAME = "data/modified_dwg_index.csv"  # output from csv_creator and manually completed
+OUTPUT_CSV_FILENAME ="data/dwg_archive_results.csv"
+input_csv_filename = ""
+output_csv_filename = ""
+
+#----------------
+#This section of info must jibe with that in the csv_creator program:
+    
+MSG_BOARD_FORUM_ID = "5"
+ANI_MSG_FORUM_ID = "6"
+TOP_LEVEL_MSG = "0"       
+PREVIOUS_ARCHIVE_DATE = datetime.datetime(2019,7,1)	# will ignore any messages older than this as they've already been processed
+CURRENT_ARCHIVE_DATE = datetime.datetime(2021, 8,23)    
+	# this is the final date included in this archive, becomes next "PREVIOUS_ARCHIVE_DATE"
+comparison_date = int(PREVIOUS_ARCHIVE_DATE.timestamp())
 
 #Input CSV file should have the following columns with names specified in main below:
 post_date_index = 0
 creation_date_index = 1
 msg_id_index = 2
-author_id_index = 3
-author_index = 4
-title_index = 5
-action_index = 6
+author_index = 3
+title_index = 4
+action_index = 5
+final_post_index=6
 category_index = 7
 post_url_index = 8
 archive_url_index = 9
-final_post_index=10
-which_book_index=11
-blurb_index=12
-short_url_index=15
-last_csv_input_index=15
+northanger_index = 10
+sense_index = 11
+pride_index = 12
+emma_index = 13
+mansfield_index = 14
+persuasion_index = 15
+juvenilia_index = 16
+misc_index = 17
+author_id_index = 18
+email_index = 19    #TODO ensure this gets used and copied...
+blurb_index=20
+last_csv_input_index=20
+
 #The output CSV file will have the same columns as input (previous list) plus this immediately after:
-to_archive_filename_index=16
-
-#-----------------------
-
-ARCHIVE_TEMPLATE = "templates/story_archive_template.html"
-CACHE_DIRECTORY = "cache/"
+to_archive_filename_index=last_csv_input_index+1
 
 #-----------------------
 
@@ -96,12 +118,10 @@ SEPERATOR_LINE = "<p><hr><p>"        # this draws visual horizontal lines.
 
 IS_LINUX = sys.platform.lower().startswith('linux')
 
-
 def str_equal(a, b):
     a = a.strip().casefold()
     b = b.strip().casefold()
     return a == b
-
 
 def loose_equal(a, b):
     #Make sure that a and b are roughly error
@@ -114,7 +134,6 @@ def loose_equal(a, b):
     if len(b) > 5 and a.startswith(b):
         return True
     return False
-
 
 def create_filename(author, title, post_date):
     #use first 15 printable chars of author concatenated with first 15 of title + posting date
@@ -284,13 +303,13 @@ def get_file(cached_filename, file_is_local, url = ''):
 def get_post_msg_body(csv_line):
     # Fetch the body of the text from the post file
     # Any blurb will be extracted for return
-    # and then any extranouse author notes will be stripped in here
+    # an then any extranous author notes will be stripped in here
 
     post_url = csv_line[post_url_index]
     print('\t fetching post url: "{}"'.format(post_url))
     msg_id = csv_line[msg_id_index]
     title = csv_line[title_index]
-
+    
     fixed_post_fn = msg_id + ".soup.html"
     if not os.path.exists(cached_path(fixed_post_fn)):
         # Fix file at this time.
@@ -300,31 +319,24 @@ def get_post_msg_body(csv_line):
             assert get_file(original_post_fn, False, post_url)
             print ("\t\tCached {} => {}".format(post_url, original_post_fn))
 
-        # Requires manual input to mark DNAs
-        fix_one_file(original_post_fn)
+            # Requires manual input to mark DNAs
+        fix_one_file(original_post_fn)   
 
     page_data = get_file(fixed_post_fn, file_is_local=True)
-
+    
     #look for blurb before it might get stripped with comments
     blurb = get_blurb(page_data)
 
     # Fix an error by seth where tags must be lowercase.
-    # TODO is this still relevant??
+    # TODO is this still relevant?? likely to be manually stripped in fix_one_file?
     page_data = (page_data
         .replace('<DNA>', '<dna>')
         .replace('</DNA>', '</dna>')
         .strip())
 
-    #print("\t page len:", len(page_data))
-    #print("\t", page_data[0:40])
-
     # Phorum post files are pre-processed by story-fixer.py
     post_start_text = '<div class="message-body">'
     post_end_text = '</div>'
-
-    assert page_data.startswith(post_start_text), (page_data[:100])
-    assert page_data.count(post_end_text) >= 1
-    assert page_data.endswith(post_end_text), (page_data[-100:],)
 
     post, comment_string = strip_comment(page_data, fixed_post_fn)
 
@@ -409,7 +421,7 @@ def html_cleanup(page_data):
 
     # TODO try out removing all </p> and see if visually different (will help out with some problems around <i>/<b>)
     # TODO try replacing 3+ br with 2.
-    # BLT: did this happen?
+    # BLT: status?
 
     return page_data
 
@@ -570,13 +582,19 @@ def create_jump_lines(post_date, msg_id):
 if not os.path.exists("cache"):
         os.makedirs("cache")
 
-with open(INPUT_CSV_PATH, encoding='utf-8') as csv_file:
+input_csv_filename = input("Specify manually edited CSV action file (default:{}):  ".format(INPUT_CSV_FILENAME))
+if input_csv_filename == "":
+    input_csv_filename = INPUT_CSV_FILENAME
+output_csv_filename = input("Specify Output CSV file (default:{}):  ".format(OUTPUT_CSV_FILENAME))
+if output_csv_filename == "":
+    output_csv_filename = OUTPUT_CSV_FILENAME
+    
+with open(input_csv_filename, encoding='utf-8') as csv_file:
     csv_reader = csv.reader(csv_file)
     csv_input = list(csv_reader)
 
-print("Archiving Dwiggie posts from: ", INPUT_CSV_PATH);
-print("Number of rows: {}, number of columns: {}".format(
-    len(csv_input), len(csv_input[0])))
+print("\nArchiving Dwiggie posts since {} from: {}\n".format(PREVIOUS_ARCHIVE_DATE, input_csv_filename))
+print("Number of rows: {}, number of columns: {}".format(len(csv_input), len(csv_input[0])))
 print()
 
 header = csv_input.pop(0)
@@ -592,21 +610,28 @@ assert header[msg_id_index] == "Msg Id"
 assert header[author_index] == "author_name"
 assert header[title_index] == "title_name"
 assert header[action_index] == "action"
-assert header[category_index] == "category"
-assert header[post_url_index] == "new posting - real url"
-assert header[archive_url_index] == "archive real url"
 assert header[final_post_index] == "FinalPost?"
-assert header[which_book_index] == "Book"
+assert header[category_index] == "category"
+assert header[post_url_index] == "posting - real url"
+assert header[archive_url_index] == "archive real url"
+assert header[northanger_index] == "northanger"
+assert header[sense_index] == "sense"
+assert header[pride_index] == "pride"
+assert header[emma_index] == "emma"
+assert header[mansfield_index] == "mansfield"
+assert header[persuasion_index] == "persuasion"
+assert header[juvenilia_index] == "juvenilia"
+assert header[misc_index] == "misc"
 assert header[blurb_index] == "Blurb"
-assert header[short_url_index] == "URL"
+assert header[email_index] == "email"
 
 # Remove any extraneous entries at end of list (defined as ones that don't have good looking dates):
-while not ('200' in csv_input[-1][0] or '199' in csv_input[-1][0]):
+while not ('200' in csv_input[-1][0] or '199' in csv_input[-1][0]):     #TODO: what is this doing exactly?
     # remove the last line :)
     dropped = csv_input.pop()
     #print("Dropping:", ",".join(dropped))
 
-csv_output = {}     # this file goes back to Margaret tracking what has happened
+csv_output = {}     # this will specify all the actions to take at dwiggie
 csv_output["header"] = header + ["New Filename"]
 tbd_output = []     # this file will need to be processed by human and then csv_output file manually updated
 tbd_output.append(header + ["New Filename"])
@@ -616,6 +641,7 @@ while download_first not in ("y", "n"):
     download_first = input("Are there posts to download? (y/n)")
 
 if download_first == 'y':
+
     # Download all forum messages for story_fixer.py
     for i, csv_line in enumerate(csv_input):
         assert len(csv_line) == len(header), (len(header), csv_line)
@@ -627,8 +653,13 @@ if download_first == 'y':
             post_url = csv_line[post_url_index]
             post_name = msg_id + ".html"
             assert get_file(post_name, False, post_url)
-            print ("\t\tCached {} => {}".format(post_url, post_name))
+#            print ("\t\tCached {} => {}".format(post_url, post_name))
 
+
+#TODO:  "email" field -> figure out how/where to store this in db
+#TODO - change archiver to use their values Epi, Fant, & ANI (which I think is original work))
+#Need to special case handling of ANI stories? they have diff fields?
+            
 toAmend = 0
 archivedNew = 0
 appendedNew = 0
@@ -640,7 +671,7 @@ for i, csv_line in enumerate(csv_input):
     assert len(csv_line) == len(header), (len(header), csv_line)
 
     action = csv_line[action_index]
-    category = csv_line[category_index]    #note that this value could be null
+    category = csv_line[category_index]    #note that this value could be null  #TODO: if this is ANI, need to do diff stuff...
     msg_id = csv_line[msg_id_index]
     is_final = csv_line[final_post_index].lower().startswith('y')
 
@@ -665,9 +696,9 @@ for i, csv_line in enumerate(csv_input):
 
     if action == "Amend":
         post_url = csv_line[post_url_index]
-        page_data = get_file(msg_id + ".html", False, post_url)
-        #NOTE: have no way to know which file (archived or new) is being amended, so let human fetch both the post and archived text
-        #or could groom the csv to include the correct info...
+        page_data = get_file(msg_id + ".html", False, post_url) #fetch file so have text editor access to it.
+        #NOTE: have no way to know which file (archived or new) is being amended, so let human figure it out.
+        # May involve manually fetching an archived story file and modifying it.
         print('\nAMENDMENT({}) - ***** HUMAN INTERVENTION required: "{}"  {} modify file and update CSV'.format(i+2, post_date, title))
 
         #Save all the data about this story so human can copy it to csv_output when amendment is complete:
@@ -804,8 +835,8 @@ for i, csv_line in enumerate(csv_input):
         page_data = ensure_new_story_format(insertion_filename, page_data)
 
         #TODO: this is temp code to make styles look correct in local work, remove before done:
-        #page_data = page_data.replace('/style/stories.css', 'style/stories.css')
-        #page_data = page_data.replace('/derby/back.gif', 'derby/back.gif')
+        page_data = page_data.replace('/style/stories.css', 'style/stories.css')
+        page_data = page_data.replace('/derby/back.gif', 'derby/back.gif')
 
         charset_info = page_data.find('<meta charset="utf-8">')
         if charset_info < 0:
@@ -902,11 +933,11 @@ for key, count in key_counts.most_common():
         assert False
 
 try:
-    with open(OUTPUT_CSV_PATH, "w", newline='') as csv_file:
+    with open(output_csv_filename, "w", newline='') as csv_file:
        writer = csv.writer(csv_file)
        writer.writerows(csv_output.values())
 
-    with open(OUTPUT_CSV_PATH + '.tbd.csv', "w", newline='') as tbd_file:
+    with open(output_csv_filename + '.tbd.csv', "w", newline='') as tbd_file:
        writer = csv.writer(tbd_file)
        writer.writerows(tbd_output)
 

@@ -1,17 +1,16 @@
 # dwg-converter
 Scripts to help convert forum posts to stories
-in process of update 9/2020 - blt
+in process of update 8/2021 - blt
 
 This whole repository is rapidly changing. The documentation is out of date or wrong in many places, sorry.
 
 ## Overview
 
 Take
- * forum posts (e.g. [To the Lakes](https://www.dwiggie.com/phorum/read.php?5,124030))
- * multi-page stories (e.g. [An Unwanted Engagement](https://www.dwiggie.com/derby/jessil1b.htm))
-And combine them into single page stories
+ * forum posts (e.g. [To the Lakes](https://www.dwiggie.com/phorum/read.php?5,124030)) and turn them into archived stories by collating the text (which may be spread across multiple forum posts) into a new, correctly named file, editing out any extraneous or "dna" material then adding the story to the correct index and moving the new file to the correct directory on dwiggie.
+ * would love to move multi-post stories (e.g. [An Unwanted Engagement](https://www.dwiggie.com/derby/jessil1b.htm)) into single page stories but that doesn't look like happening.
 
-## Artifacts
+## Artifacts (update this section)
 
 **`dwg-posts-2019-01-26.csv`** is the cannonical input csv it was downloaded from the Google Spreadsheet on 2019-01-26 and information about urls, authors, titles, ...
   * The complete header is ```last_update/Posting,date_created,Msg Id,author_id,author_name,title_name,comments,new posting - real url,archive real url,FinalPost?,WhichBook?,Archive Title,Archive Title ID,URL,```
@@ -35,7 +34,9 @@ And combine them into single page stories
 
 Several helper scripts exist
 
-**`story_archiver.py`**: Downloads forum posts
+**`csv_creator.py`**: converts forum post json to corresponding csv
+
+**`story_archiver.py`**: Downloads forum post
 
 **`story_fetcher.py`**: Download all existing stories
 
@@ -48,6 +49,28 @@ Several helper scripts exist
 ## Workflows
 
 ```
+# Go to dwiggie server php_***** and:
+#	- export forum data (cpanel: dwiggiec_dwg->phorum_messages) to local file, dwg_posts.json
+#	- export master story index (cpanel: dwiggiec_dwg->dwg_stories) to local file, dwg_stories
+# edit csv_creator to update the current and previous archive date constants
+# run csv_creator to convert the two jsons to a corresponding, merged index csv.
+# import that index csv into a spread sheet (google sheets avoids some Excel char set issues):
+#	- sort the entries by date and highlight all the new entries
+#	- resort by author/story title and ensure:
+#	   that the story parts sequence using IDENTICAL author names and titles
+#	        (title text following "::" is ignored, allowing for e.g. "Chapter n")  
+#	      watch out for posts that are continuations of previously archived stories
+#	   the correct action is chosen - e.g. new vs append
+#	   the story category and book are specified (have to look at each post)
+#	   the story_final value is correctly specified (have to look at each post)
+# export the spreadsheet to a new csv which will be input to story_archiver
+#run story archiver which requires the modified CSV and also the dwg_stories json file.
+#    - use a large shell window in order to best view the required editing lines. 
+#    - the "editor' allows you to nominate line ranges (e.g. "0-5") which will be removed from final text
+#          choose all dna, extraneous author notes, and ending lines (e.g. FINIS or THE END)
+
+
+#Review/update this - still relevant?:
 # Download all stories locally, creates stories_raw/ and stories/
 # Saves a map of URL => local file in url_data.json
 # e.g. "https://www.dwiggie.com/derby/olde/gabby1.htm" => "99cc07d1fcb85292819b4766922081e6.html")
