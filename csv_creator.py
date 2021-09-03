@@ -38,6 +38,7 @@ num_stories_entries = 0
 
 dwg_url_prefix = "https://www.dwiggie.com"
 post_url_prefix = "https://www.dwiggie.com/phorum/read.php?5,"
+ANI_url_prefix = "https://www.dwiggie.com/phorum/read.php?6,"
 
 #Output index CSV file will have columns with the names/order specified here:
 index_csv_header = ["last_update/Posting", "create_date", "Msg Id", "author_name", "title_name",
@@ -127,7 +128,7 @@ with open(input_posts_json_filename) as json_file:
                             , "TBD" # action
                             , "0" # final   #assume not until learn otherwise
                             , "ANI"
-                            , post_url_prefix + entry["message_id"]
+                            , ANI_url_prefix + entry["message_id"]
                             , ""    # archive url
                             , "", "", "", "", "", "", "", ""  # all irrelevant for ANI
                             , entry['user_id']

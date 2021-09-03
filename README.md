@@ -61,16 +61,37 @@ Several helper scripts exist
 #	        (title text following "::" is ignored, allowing for e.g. "Chapter n")  
 #	      watch out for posts that are continuations of previously archived stories
 #	   the correct action is chosen - e.g. new vs append
-#	   the story category and book are specified (have to look at each post)
-#	   the story_final value is correctly specified (have to look at each post)
+#	   look at each post to determine:
+# 		the story category and book
+#		the story_final value is correctly specified
+#		copy any blurb included with any keyword other than "blurb" 
+#	   that the url of the entry before the first AppendArchive is actually the final page of any multipage story else... 
 # export the spreadsheet to a new csv which will be input to story_archiver
 #run story archiver which requires the modified CSV and also the dwg_stories json file.
-#    - use a large shell window in order to best view the required editing lines. 
+#    - use a large shell window in order to best view the required editing lines for each post file:
 #    - the "editor' allows you to nominate line ranges (e.g. "0-5") which will be removed from final text
-#          choose all dna, extraneous author notes, and ending lines (e.g. FINIS or THE END)
+#          specify all dna, extraneous author notes, title, author notes
+#	   if author specified a DNA/RA pair, must include the matched set in the deletion selection
+#	   blurbs will be extracted before stripping so if inside dna, don't worry but ensure that blurbs are deliminted with a <BR>
+#	   watch out for formatting e.g. <span> stuff, sometimes that is on first line, don't delete it or will crash
+#	   also crashes if specify, seperately, two adjacent lines!
+#    - as each file appears for edit, I cross ref agst the web page to ensure nothing outside my view is amiss. 
+#         sometimes I have to edit the soup.html to fix things 
+#    - appending to old archive files that are not in the new format requires a trip to a pop-up editor.
+#	   In this case, you need to rearrange some markers at the beginning and end of file in very particular ways
+#		as documented in the ensure_new_format procedure. Takes some trial and error the first time!
+#    - to rerun and recreate append to archive stories, must delete the original url file else skips. Be sure to do this before done
+# review the output csv file to ensure that all entries are complete, in particular, the blurbs. 
+#	Blurb processing is easily defeated by the random things that authors do, can modify the soup file or edit csv
+#	If blurbs are missing, manually add one to the modified_csv and that will carry over to the output
+
+# Need to change the template file path in the html before done - either rerun (deleting and rediting append to archive files)
+#	or run some magic linux cmd. 
+# Review the output files to ensure that they look correct:
+#	For stories with many updates, might want to manually prune most of the jump links
 
 
-#Review/update this - still relevant?:
+#Review/update this - still relevant? or was this an attempt to merge multi page stories??:
 # Download all stories locally, creates stories_raw/ and stories/
 # Saves a map of URL => local file in url_data.json
 # e.g. "https://www.dwiggie.com/derby/olde/gabby1.htm" => "99cc07d1fcb85292819b4766922081e6.html")

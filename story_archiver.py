@@ -16,9 +16,10 @@ from story_fixer import fix_one_file
 
 #-----------------------
 
+# TODO: toggle these two off for production run
 ONLY_A_FEW = False
-# TODO need to toggle off for final run.
-MOVING_FAST_BREAKING_THINGS = True
+MOVING_FAST_BREAKING_THINGS = False
+    #do we need to run one complete run with this to True in to format any historical files for appendarchive?
 
 #-----------------------
 
@@ -28,20 +29,21 @@ CACHE_DIRECTORY = "cache/"      #both inbound and outbound files end up here
 #------------------------
 
 INPUT_CSV_FILENAME = "data/modified_dwg_index.csv"  # output from csv_creator and manually completed
-OUTPUT_CSV_FILENAME ="data/dwg_archive_results.csv"
+OUTPUT_CSV_FILENAME = "data/dwg_archive_results.csv"
 input_csv_filename = ""
 output_csv_filename = ""
 
 #----------------
 #This section of info must jibe with that in the csv_creator program:
     
-MSG_BOARD_FORUM_ID = "5"
-ANI_MSG_FORUM_ID = "6"
-TOP_LEVEL_MSG = "0"       
 PREVIOUS_ARCHIVE_DATE = datetime.datetime(2019,7,1)	# will ignore any messages older than this as they've already been processed
 CURRENT_ARCHIVE_DATE = datetime.datetime(2021, 8,23)    
 	# this is the final date included in this archive, becomes next "PREVIOUS_ARCHIVE_DATE"
 comparison_date = int(PREVIOUS_ARCHIVE_DATE.timestamp())
+
+MSG_BOARD_FORUM_ID = "5"
+ANI_MSG_FORUM_ID = "6"
+TOP_LEVEL_MSG = "0"
 
 #Input CSV file should have the following columns with names specified in main below:
 post_date_index = 0
@@ -63,7 +65,7 @@ persuasion_index = 15
 juvenilia_index = 16
 misc_index = 17
 author_id_index = 18
-email_index = 19    #TODO ensure this gets used and copied...
+email_index = 19
 blurb_index=20
 last_csv_input_index=20
 
@@ -110,6 +112,7 @@ ITALIC_TAG = "<i>"
 ITALIC_END_TAG = "</i>"
 BOLD_TAG = "<b>"
 BOLD_END_TAG = "</b>"
+DIV_END_TAG = "</div>"
 
 EMPTY_LINE = "<p>"
 SEPERATOR_LINE = "<p><hr><p>"        # this draws visual horizontal lines.
@@ -148,7 +151,7 @@ def create_filename(author, title, post_date):
 def strip_post_space(data):
     data = data.strip()
 
-    hr_br_or_space = r'(\s*<[bh]r */?>\s*)*'
+    hr_br_or_space = r'(\s*<[bh]r\s*/?>\s*)\+' 
     data = re.sub(r'^' + hr_br_or_space, '', data)
     data = re.sub(hr_br_or_space + r'$', '', data)
     return data
@@ -190,7 +193,6 @@ def strip_comment(post, post_name):
 
 def find_keyword_string (post, keyword, caseless = False):
     # finds and returns the string following keyword up to next BR_TAG
-    # will remove any leading white space and embedded html tags
 
     if caseless:
         start = post.lower().find(keyword.lower())
@@ -200,25 +202,28 @@ def find_keyword_string (post, keyword, caseless = False):
     keyword_string = ''
     if start >= 0:    # found our tag;
         end = post.find(BR_TAG, start)
+        #Hack: doesn't find end if blurb is final item in the post - iwc, should be followed by "</div>" or our marker, "</dna>"
+        if end ==-1:
+            end = post.find("</", start)
         assert end != -1, keyword + " string failed to terminate"
         keyword_string = post[start+len(keyword): end]
     return keyword_string
 
 
 def get_blurb(post):
+    # unfortunately, some authors use 'summary' for the blurb,
+    # but others use summary on subsequent posts to summarize situation so far...
+    # so can't rely on "summary" as a keyword.Have manually handle those: for all empty
+    # blurbs in the output CSV, /generate text and store it in the input CSV, then rerun archiver.
+
     # Remove (replace with empty) anything that looks like <b> <i> open or close (</b>) tag.
     # Should we do a more general replace of anything in <>?
     local_post = re.sub(
         r'</* *[bi] *>', '',
         post.lower()).strip()
-
-    blurb = find_keyword_string(local_post, "Blurb:", True)
-    if not blurb:
-        blurb = find_keyword_string(local_post, "Blurb", True)
-    # unfortunately, some authors use summary for the blurb,
-    # but others use summary on subsequent posts to summarize situation so far...
-    # so can't rely on "summary" as a keyword. Will have to do those manually - for all empty
-    # blurbs in the output CSV, find some text and store it in the input CSV, then rerun.
+  
+    blurb = find_keyword_string(local_post, "Blurb", True)
+    blurb = blurb.strip(" \n:")   #sometimes there is a ':' or a ' :' or even '\n :' after 'blurb'     
     return blurb
 
 
@@ -229,7 +234,7 @@ def format_new_post(title, author, post_date, post, is_final):
         template = template_file.read()
 
     jump_link_string, jump_label = create_jump_lines(post_date, msg_id)
-    #TODO: for now, make jump links invisible in new stories but maybe rethink this:
+    #TODO 2019: for now, make jump links invisible in new stories but maybe rethink this:
     jump_link_string = '<!-- ' + jump_link_string +' -->'
     story_data = STORY_TEMPLATE.format(
         jump_label=jump_label,
@@ -245,9 +250,9 @@ def format_new_post(title, author, post_date, post, is_final):
         .replace("$JUMP_SECTION", JUMP_TEMPLATE.format(jump_link=jump_link_string))
         .replace("$POST_BODY_SECTION", story_data)
         .replace("$CLOSING_SECTION", closing_section)
-        #TODO: these two are temp code to make styles look correct in local work, remove before done:
-        #.replace('/style/stories.css', 'style/stories.css')
-        #.replace('/derby/back.gif', 'derby/back.gif')
+        #TODO: comment out these lines for production run, and in append archive below
+        .replace('/style/stories.css', '../templates/stories.css')
+        .replace('/derby/back.gif', '../templates/back.gif')
         #NOTE Seth had put this backlink in to jump to the original post but Margaret and I don't like that
         #.replace("$OGLINK", '<a href="{}.html">originalpost</a><br/>'.format(msg_id))
         .replace("$COPYRIGHT_YEAR", post_date[:4]))
@@ -257,8 +262,7 @@ def format_new_post(title, author, post_date, post, is_final):
     with open(output_name, "w", encoding="utf-8") as output_file:
         output_file.write(new_story)
 
-    print("\t wrote {}  chars to {}".format(
-        len(new_story), output_name))
+    print("\t wrote to {}".format(output_name))
 
     return output_name
 
@@ -306,9 +310,9 @@ def get_post_msg_body(csv_line):
     # an then any extranous author notes will be stripped in here
 
     post_url = csv_line[post_url_index]
-    print('\t fetching post url: "{}"'.format(post_url))
     msg_id = csv_line[msg_id_index]
     title = csv_line[title_index]
+    #print('\t processing: "{}"'.format(msg_id))
     
     fixed_post_fn = msg_id + ".soup.html"
     if not os.path.exists(cached_path(fixed_post_fn)):
@@ -327,12 +331,8 @@ def get_post_msg_body(csv_line):
     #look for blurb before it might get stripped with comments
     blurb = get_blurb(page_data)
 
-    # Fix an error by seth where tags must be lowercase.
-    # TODO is this still relevant?? likely to be manually stripped in fix_one_file?
-    page_data = (page_data
-        .replace('<DNA>', '<dna>')
-        .replace('</DNA>', '</dna>')
-        .strip())
+    # This is verifying that all dna's ended up as lowercase in story_fixer:
+    assert '<DNA>' not in page_data, "assumed incorrectly, convert these to lowercase"
 
     # Phorum post files are pre-processed by story-fixer.py
     post_start_text = '<div class="message-body">'
@@ -344,7 +344,7 @@ def get_post_msg_body(csv_line):
     for trigger in ["a/n", "<dna", "author's note"]:
         # These have to be manually cleaned up by editing some files.
         start = lower.find(trigger)
-        assert start == -1, (fixed_post_fn, trigger, lower[start-10:start+10])
+        assert start == -1, (fixed_post_fn, "must remove: ", trigger, lower[start-10:start+10])
 
 #    need to look for author provided ending status.
 #    Now assume that Human will clean that up in story fixer step previous to here
@@ -421,7 +421,7 @@ def html_cleanup(page_data):
 
     # TODO try out removing all </p> and see if visually different (will help out with some problems around <i>/<b>)
     # TODO try replacing 3+ br with 2.
-    # BLT: status?
+    # BLT 2019: status?
 
     return page_data
 
@@ -460,8 +460,17 @@ def story_in_new_format(page_data, ignore_assert=True):
     return True
 
 
-#This is called with archived files that we are going to append to
+#This is called with archived files that we are going to append to.
+# If we've not seen this file before, we need to "fix" its format. 
+#    An editor process is spawned for human and the resulting text version cached. 
 def ensure_new_story_format(file_name, page_data):
+
+    BYTE_ORDER_MARK = "ï»¿"
+    #this gets inserted by some editors, such as Notepad. I mistakenly added at least one in prev archive
+    start = page_data.find(BYTE_ORDER_MARK)
+    if start == 0:    # found our tag;
+        page_data = page_data[len(BYTE_ORDER_MARK):]
+       
     if story_in_new_format(page_data):
         return page_data
 
@@ -490,7 +499,7 @@ def ensure_new_story_format(file_name, page_data):
             page_data[copyright_index:]
         return page_date
 
-    # Human is responsible for this editing of archived files:
+    # Human is responsible for this editing of archived files (these rules are very particularly enforced above in story_in_new_format:
     #   1. Moving the JUMP_LINK_INSERTION_MARKER to the correct point (after others or after navigations or after author name)
     #       a. If no pre-existing navigate / jump section add a following SEPERATOR_LINE (<p><hr></p>)
     #   2. Moving STORY_STATUS_MARKER at end up to precede copyright and it's hr
@@ -517,14 +526,14 @@ def ensure_new_story_format(file_name, page_data):
 
     # Open the file for human processing
     if IS_LINUX:
-        subprocess.check_output(["gedit", temp_file_path])
+        subprocess.check_output(["gedit", "--new-window", "--wait", temp_file_path])  
     else:
         subprocess.check_output(["notepad.exe", temp_file_path])
 
     with open(temp_file_path, encoding="utf-8") as f:
         new_data = f.read().strip()
 
-    # if 1a then <p><hr></p> adds ~15 characters
+    # if case 1a above then <p><hr></p> adds ~15 characters
     # Make sure no more than 30 characters were added to the file.
     assert len(write_data) + 30 >= len(new_data) > len(page_data), (len(write_data), len(new_data), len(page_data))
 
@@ -559,9 +568,9 @@ def change_story_status(page_data, is_final):
         current.group(0), # The entire match STORY_STATUS_MARKER + current_text + STORY_STATUS_MARKER_CLOSE
         STORY_STATUS_MARKER + new_status + STORY_STATUS_MARKER_CLOSE)
 
-    #TODO: should we do a lower case search of the 70 chars before the STORY_STATUS_MARKER
+    #TODO 2019: should we do a lower case search of the 70 chars before the STORY_STATUS_MARKER
     # for {To Be Continued, The End, Fin}
-    # to verify that there will be no unwanted duplication?
+    # currently relying on manual preprocessing above to avoid duplication
 
 def create_jump_lines(post_date, msg_id):
     #creates html for jump_link_string to "take" reader to jump_label
@@ -588,7 +597,8 @@ if input_csv_filename == "":
 output_csv_filename = input("Specify Output CSV file (default:{}):  ".format(OUTPUT_CSV_FILENAME))
 if output_csv_filename == "":
     output_csv_filename = OUTPUT_CSV_FILENAME
-    
+output_tbd_filename = output_csv_filename + '.tbd.csv'
+
 with open(input_csv_filename, encoding='utf-8') as csv_file:
     csv_reader = csv.reader(csv_file)
     csv_input = list(csv_reader)
@@ -600,8 +610,8 @@ print()
 header = csv_input.pop(0)
 
 # Join each item in the list with ', ' and print
-print("Column Headers:")
-print(", ".join(header))
+#print("Column Headers:")
+#print(", ".join(header))
 #print()
 
 # Verify important column assumptions
@@ -625,20 +635,24 @@ assert header[misc_index] == "misc"
 assert header[blurb_index] == "Blurb"
 assert header[email_index] == "email"
 
+IMPORTANT_ACTIONS = ("Amend", "ArchiveNew", "AppendNew", "AppendArchive")
+
 # Remove any extraneous entries at end of list (defined as ones that don't have good looking dates):
-while not ('200' in csv_input[-1][0] or '199' in csv_input[-1][0]):     #TODO: what is this doing exactly?
+while not csv_input[-1][post_date_index].startswith(('20','199')):
     # remove the last line :)
     dropped = csv_input.pop()
     #print("Dropping:", ",".join(dropped))
 
 csv_output = {}     # this will specify all the actions to take at dwiggie
 csv_output["header"] = header + ["New Filename"]
-tbd_output = []     # this file will need to be processed by human and then csv_output file manually updated
+tbd_output = []
+   # this file holds all the non "ArchiveNew", "AppendNew", "AppendArchive entrys and
+   # must be processed by a human. In case of Amend, csv_output file may need to be manually updated as a result
 tbd_output.append(header + ["New Filename"])
 
 download_first = ""
 while download_first not in ("y", "n"):
-    download_first = input("Are there posts to download? (y/n)")
+    download_first = input("Are there post files to download? (y/n)")
 
 if download_first == 'y':
 
@@ -649,31 +663,31 @@ if download_first == 'y':
         action = csv_line[action_index]
         msg_id = csv_line[msg_id_index]
 
-        if action in ("Amend", "ArchiveNew", "AppendNew", "AppendArchive"):
+        if action in IMPORTANT_ACTIONS:
             post_url = csv_line[post_url_index]
             post_name = msg_id + ".html"
             assert get_file(post_name, False, post_url)
 #            print ("\t\tCached {} => {}".format(post_url, post_name))
+print()
 
-
-#TODO:  "email" field -> figure out how/where to store this in db
-#TODO - change archiver to use their values Epi, Fant, & ANI (which I think is original work))
-#Need to special case handling of ANI stories? they have diff fields?
-            
 toAmend = 0
 archivedNew = 0
 appendedNew = 0
 appendedArchive = 0
-extraneousCSVEntries = 0
+deleteCount = 0
+extraneousActions = 0
 
 for i, csv_line in enumerate(csv_input):
     # Verify this line has correct number of columns
     assert len(csv_line) == len(header), (len(header), csv_line)
 
     action = csv_line[action_index]
-    category = csv_line[category_index]    #note that this value could be null  #TODO: if this is ANI, need to do diff stuff...
+    category = csv_line[category_index]
+    if action in IMPORTANT_ACTIONS and not (category in ("Epi", "Fant", "ANI")):
+        print ("\t\Missing Category Value: ({}) ".format(i, csv_line[title_index]))
+
     msg_id = csv_line[msg_id_index]
-    is_final = csv_line[final_post_index].lower().startswith('y')
+    is_final = csv_line[final_post_index] == "1"
 
     # Archived entries shouldn't have a action:
     if msg_id != "":
@@ -682,6 +696,12 @@ for i, csv_line in enumerate(csv_input):
     if action == "":
         continue
 
+    #TODO marker and conditional for debugging breakpoint:
+    #if msg_id == "specify message id here": 
+    #   print("This is a Message with a problem")
+    #else:
+    #    continue
+    
     post_date = csv_line[post_date_index]
     author = csv_line[author_index]
     temp_title = csv_line[title_index]
@@ -699,13 +719,11 @@ for i, csv_line in enumerate(csv_input):
         page_data = get_file(msg_id + ".html", False, post_url) #fetch file so have text editor access to it.
         #NOTE: have no way to know which file (archived or new) is being amended, so let human figure it out.
         # May involve manually fetching an archived story file and modifying it.
-        print('\nAMENDMENT({}) - ***** HUMAN INTERVENTION required: "{}"  {} modify file and update CSV'.format(i+2, post_date, title))
+        print('''\nAMENDMENT({}) - ***** HUMAN INTERVENTION required: "{}"
+              {} modify file and update CSV\n'''.format(i+2, post_date, csv_line[title_index]))
 
         #Save all the data about this story so human can copy it to csv_output when amendment is complete:
         tbd_line = csv_line[:last_csv_input_index+1] + ["TBD"]     #we don't have a file to modify, human will have to add it.
-        tbd_line[title_index] = title
-        tbd_line[post_date_index] = csv_line[post_date_index]
-        tbd_line[final_post_index] = csv_line[final_post_index]
         tbd_output.append(tbd_line)
         toAmend += 1
         continue
@@ -715,21 +733,21 @@ for i, csv_line in enumerate(csv_input):
         if ONLY_A_FEW and archivedNew >= 5:
             continue
 
-        print('\nARCHIVE NEW({}): "{}"'.format(i+2, title))
+        print('ARCHIVE NEW({}): "{}"  id {}'.format(i+2, title, msg_id))
+        #TODO 2019  we could check whether file already exists before doing the work but no harm
         message_body, blurb = get_post_msg_body(csv_line)
         new_filename = format_new_post(
             title, author,
             post_date, message_body,
             is_final)
 
-        #TODO - there was the case that the first entry was a dna, are there other cases?
-        assert title not in csv_output or csv_output[title][action_index] == 'dna', (title, csv_output[title])
+       assert (not title in csv_output, (title, csv_output[title])
 
-        #Save all the (new) data about this story (use stripped title) and the file (stripped of it's path name) where the new story resides:
-        if blurb:   # save any new blurb over whatever might be in the input file:
+        #Save the (new) story data (use stripped title) and the file (stripped of it's path name) where the new story resides:
+        if blurb:   # save any new blurb over whatever might be in the input csv:
             csv_line[blurb_index] = blurb
             #print("blurb: " + csv_line[blurb_index])
-        else:   # provide placeholder but anything that already pre-exists in the input file!
+        else:   # use any csv content else provide placeholder
             if not csv_line[blurb_index]:
                 csv_line[blurb_index] = "tbd"
 
@@ -745,7 +763,7 @@ for i, csv_line in enumerate(csv_input):
         if ONLY_A_FEW and appendedNew >= 5:
             continue
 
-        print('\nAPPEND NEW({}): {}'.format(i+2, title))
+        print('APPEND NEW({}): {}  id {}'.format(i+2, csv_output[title][title_index], msg_id))
 
         #fetch post text to append to file created previously during this archive:
         message_body, blurb = get_post_msg_body(csv_line)
@@ -757,14 +775,15 @@ for i, csv_line in enumerate(csv_input):
 
         #find the relevant file to append to which should now have an entry in the output CSV from previous post
         if title not in csv_output: # see if it is there caseless and if so, correct current titles to match saved title
+            #TODO 2020: should disambiguate any duplicate titles via author name, but will wait til that happens...
             matches = [csv_output[key] for key in csv_output if str_equal(key, title)]
-            assert len(matches) == 1, (title, matches)
+            assert len(matches) == 1, (title, matches, "stories of same name, add duplication handling to code!")  
             title = csv_line[title_index] = matches[0][title_index]
         assert title, "Appending to non-existent story!"
         insertion_file = csv_output[title][to_archive_filename_index]
         page_data = get_file(insertion_file, True)
 
-        print('\t from {} into {}'.format(title, insertion_file))
+        print('\t into {}'.format(insertion_file))
 
         # find the insertion point:
         insertion_index =  page_data.rfind(STORY_INSERTION_MARKER)
@@ -777,7 +796,7 @@ for i, csv_line in enumerate(csv_input):
 
         #Add jump labels:
         jump_link_string, jump_label = create_jump_lines(post_date, msg_id)
-        #TODO: for now, make jump links invisible but maybe rethink this:
+        #TODO 2019: for now, make jump links invisible but maybe rethink this:
         jump_link_string = '<!-- ' + jump_link_string +' -->'
         story_data = STORY_TEMPLATE.format(jump_label=jump_label, date=post_date, body=message_body,)
         #this is where the white space gets inserted between posts
@@ -804,7 +823,7 @@ for i, csv_line in enumerate(csv_input):
         if ONLY_A_FEW and appendedArchive >= 2:
             continue
 
-        print('\nAPPEND ARCHIVE({}): {}'.format(i+2, title))
+        print('APPEND ARCHIVE({}): {} id {}'.format(i+2, title, msg_id))
 
         #fetch post text to append to archived file:
         message_body, blurb = get_post_msg_body(csv_line)
@@ -812,18 +831,20 @@ for i, csv_line in enumerate(csv_input):
             print("\tFOUND NEW BLURB: " + blurb)
             #blurb will get saved to the output_csv when we find the appropriate entry below
 
-        #Determine the correct associated archive file to fetch - should be first CSV entry with matching title:
+        #Determine the correct associated archive file to fetch:
         archive_url = ''
         for j, test_line in enumerate(csv_input):
            if str_equal(test_line[title_index], title):
-               #title alone is insufficient, test author name too but remember that author string isn't always exact match!
-               if (test_line[author_index] != csv_line[author_index] and
+               #title alone is insufficient, test author name too but remember that author string isn't always an exact match e.g. GabyA and Gaby A!
+               # assume author won't write two stories with exact same name...
+               if (test_line[author_index] != csv_line[author_index] and not
                        loose_equal(test_line[author_index], csv_line[author_index])):
-                   print("\tERROR: appending with non-matching author names: {} {}):".format(csv_line[author_index], test_line[author_index]))
-                   assert False
-               archive_url = test_line[archive_url_index]
-               print('\t APPENDING to: {}'.format(archive_url))
-               break
+                   continue     # loop and see if we find another matching title
+               else:
+                   archive_url = test_line[archive_url_index]
+                   print('\t APPENDING to: {}'.format(archive_url))
+                   break
+                 
         assert archive_url
         #print('Appending({}): ***** ERROR: no archive file for {}'.format(i+2, csv_line[title_index]))
 
@@ -835,8 +856,8 @@ for i, csv_line in enumerate(csv_input):
         page_data = ensure_new_story_format(insertion_filename, page_data)
 
         #TODO: this is temp code to make styles look correct in local work, remove before done:
-        page_data = page_data.replace('/style/stories.css', 'style/stories.css')
-        page_data = page_data.replace('/derby/back.gif', 'derby/back.gif')
+        page_data = page_data.replace('/style/stories.css', '../templates/stories.css')
+        page_data = page_data.replace('/derby/back.gif', '../templates/back.gif')
 
         charset_info = page_data.find('<meta charset="utf-8">')
         if charset_info < 0:
@@ -852,7 +873,7 @@ for i, csv_line in enumerate(csv_input):
         assert STORY_INSERTION_MARKER in page_data, "see above line"
 
         if jump_link_string in page_data and jump_label in page_data:
-            print("\tAppend already performed (already found {})".format(jump_label))
+            print("    **** Append already performed (found jump link {})".format(jump_label))
         else:
             # remove any story_status from existing file and append correct status to end of new:
             page_data = change_story_status(page_data, is_final)
@@ -886,40 +907,36 @@ for i, csv_line in enumerate(csv_input):
             with open(output_file, "w", encoding="utf-8") as output_file:
                 output_file.write(new_page_data)
 
-        #TODO: should we copy the entire input csv_line?
-        if title not in csv_output:     # start with the archived story data from matching entry
+        if title not in csv_output:     # start with the archived story data from matching entry but only on first append
             #print('\tAdding title to csv output', title)
             csv_output[title] = test_line[:last_csv_input_index+1] + [insertion_filename]
             csv_output[title][action_index] = csv_line[action_index]
-            csv_output[title][category_index] = csv_line[category_index]
-
-        csv_output[title][post_date_index] = csv_line[post_date_index]
+            csv_output[title][category_index] = csv_line[category_index]    # in case it get's recategorized?
+        csv_output[title][post_date_index] = csv_line[post_date_index]      #update the dates on each subsequent append
         csv_output[title][final_post_index] = csv_line[final_post_index]
-        if blurb:
+        if blurb:                              # suppose a new one could appear in a chapter
             csv_output[title][blurb_index] = blurb
-
 
         appendedArchive += 1
         continue
 
+    elif action == "delete":
+        #garbage post that is ignored here and deleted from forum
+        print('\n*** Delete this post({}): "{}" by {}\n'.format(i+2, title, author))
+        tbd_output.append(csv_line[:last_csv_input_index+1] + [''])
+        #csv_output[title] = csv_line[:last_csv_input_index+1] + ['']
+        deleteCount += 1
+        continue
+    elif action == "dna":
+        #Do Not Archive, so, duh, do nothing here, don't get removed from forum archive so could equally use no-op
+        print('DNA this post({}): "{}" by {}'.format(i+2, title, author))
+        extraneousActions+=1
+        continue
     elif action == "no-op":
         #these are extraneous posts, for example, previously processed posts,
         # ignore here, but they will get archived from forum
-        #print('No-op({}): "{}" by {}'.format(i+2, title, author))
-        continue
-    elif action == "delete":
-        #garbage post that is ignored here and deleted from forum
-        print('\nDelete this post({}): "{}" by {}'.format(i+2, title, author))
-        if title not in csv_output:
-            csv_output[title] = csv_line[:last_csv_input_index+1] + ['']
-            extraneousCSVEntries += 1
-        continue
-    elif action == "dna":
-        #Do Not Archive, so, duh, do nothing here, do they get removed from forum archive?
-        print('\nDNA this post({}): "{}" by {}'.format(i+2, title, author))
-        if title not in csv_output:
-            csv_output[title] = csv_line[:last_csv_input_index+1] + ['']
-            extraneousCSVEntries += 1
+        # (annoying!) print('No-op({}): "{}" by {}'.format(i+2, title, author))
+        extraneousActions+=1
         continue
     else:
         print("unhandled action:", action)
@@ -937,19 +954,24 @@ try:
        writer = csv.writer(csv_file)
        writer.writerows(csv_output.values())
 
-    with open(output_csv_filename + '.tbd.csv', "w", newline='') as tbd_file:
-       writer = csv.writer(tbd_file)
-       writer.writerows(tbd_output)
-
+    if len(tbd_output) > 1:     #don't create unless there is something other than header in the file
+        with open(output_tbd_filename, "w", newline='') as tbd_file:
+            writer = csv.writer(tbd_file)
+            writer.writerows(tbd_output)
 
 except IOError:
     print("I/O error")
-# len-1 is for the header line, and -extraneousCSVEntries is for non story entries
-print("""
-Archive complete:
+
+print(
+'''Archive complete:
     {} story files created
-    {} Amendments must be completed manually (refer to log or CSV file)
+    {} Amendments must be completed manually (refer to log or {})
+    {} Forum Deletions to be completed manually
+    {} Extraneous posts requiring no action
     {} New Stories (with {} Updates to those)
-    {} Archived stories updated ({} posts)""".format(
-    len(csv_output)-extraneousCSVEntries-1, toAmend, archivedNew, appendedNew,
-    len(csv_output)-archivedNew-extraneousCSVEntries-1, appendedArchive))
+    {} Archived stories received ({} updates)'''.format(
+    len(csv_output)-1, toAmend, output_tbd_filename, deleteCount, extraneousActions,
+    archivedNew, appendedNew, len(csv_output)-1 -archivedNew, appendedArchive))
+# len-1 deducts the header line, 
+
+print("\nBe sure to scan back thru output for possible instructions or problems")
