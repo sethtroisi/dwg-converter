@@ -37,7 +37,7 @@ output_csv_filename = ""
 #This section of info must jibe with that in the csv_creator program:
     
 PREVIOUS_ARCHIVE_DATE = datetime.datetime(2019,7,1)	# will ignore any messages older than this as they've already been processed
-CURRENT_ARCHIVE_DATE = datetime.datetime(2021, 8,23)    
+CURRENT_ARCHIVE_DATE = datetime.datetime(2021, 9,7)    
 	# this is the final date included in this archive, becomes next "PREVIOUS_ARCHIVE_DATE"
 comparison_date = int(PREVIOUS_ARCHIVE_DATE.timestamp())
 
@@ -251,8 +251,9 @@ def format_new_post(title, author, post_date, post, is_final):
         .replace("$POST_BODY_SECTION", story_data)
         .replace("$CLOSING_SECTION", closing_section)
         #TODO: comment out these lines for production run, and in append archive below
-        .replace('/style/stories.css', '../templates/stories.css')
-        .replace('/derby/back.gif', '../templates/back.gif')
+        # note that the stories.css contains it's own pointer which doesn't work hence the modified copy
+        #.replace('/style/stories.css', '../templates/stories (for local use only).css')
+        #.replace('/derby/back.gif', '../templates/back.gif')
         #NOTE Seth had put this backlink in to jump to the original post but Margaret and I don't like that
         #.replace("$OGLINK", '<a href="{}.html">originalpost</a><br/>'.format(msg_id))
         .replace("$COPYRIGHT_YEAR", post_date[:4]))
@@ -331,7 +332,6 @@ def get_post_msg_body(csv_line):
     #look for blurb before it might get stripped with comments
     blurb = get_blurb(page_data)
 
-    # This is verifying that all dna's ended up as lowercase in story_fixer:
     assert '<DNA>' not in page_data, "assumed incorrectly, convert these to lowercase"
 
     # Phorum post files are pre-processed by story-fixer.py
@@ -427,6 +427,7 @@ def html_cleanup(page_data):
 
 
 def story_in_new_format(page_data, ignore_assert=True):
+
     if JUMP_LINK_INSERTION_MARKER not in page_data:
         assert ignore_assert
         return False
@@ -461,8 +462,7 @@ def story_in_new_format(page_data, ignore_assert=True):
 
 
 #This is called with archived files that we are going to append to.
-# If we've not seen this file before, we need to "fix" its format. 
-#    An editor process is spawned for human and the resulting text version cached. 
+# If we've not seen this file before, we need to "fix" its format. Do so manually in editor and then cache that copy. 
 def ensure_new_story_format(file_name, page_data):
 
     BYTE_ORDER_MARK = "ï»¿"
@@ -570,7 +570,7 @@ def change_story_status(page_data, is_final):
 
     #TODO 2019: should we do a lower case search of the 70 chars before the STORY_STATUS_MARKER
     # for {To Be Continued, The End, Fin}
-    # currently relying on manual preprocessing above to avoid duplication
+    # currently relying on manual preprocessing to avoid duplication?
 
 def create_jump_lines(post_date, msg_id):
     #creates html for jump_link_string to "take" reader to jump_label
@@ -741,7 +741,9 @@ for i, csv_line in enumerate(csv_input):
             post_date, message_body,
             is_final)
 
-       assert (not title in csv_output, (title, csv_output[title])
+        #might have a previous entry which is no-op or dna or other, that is okay
+        assert ((not title in csv_output) or
+                (csv_output[title][action_index] in ["dna", "delete", "amend", "no-op"])), (title, csv_output[title])
 
         #Save the (new) story data (use stripped title) and the file (stripped of it's path name) where the new story resides:
         if blurb:   # save any new blurb over whatever might be in the input csv:
@@ -846,8 +848,7 @@ for i, csv_line in enumerate(csv_input):
                    break
                  
         assert archive_url
-        #print('Appending({}): ***** ERROR: no archive file for {}'.format(i+2, csv_line[title_index]))
-
+       
         # find the insertion file, going to hope they all have same basic format at end!
         # Note: because the local cache is searched first, multiple calls to append archive will magically work correctly!
         start_indx = archive_url.rfind("/")
@@ -856,8 +857,8 @@ for i, csv_line in enumerate(csv_input):
         page_data = ensure_new_story_format(insertion_filename, page_data)
 
         #TODO: this is temp code to make styles look correct in local work, remove before done:
-        page_data = page_data.replace('/style/stories.css', '../templates/stories.css')
-        page_data = page_data.replace('/derby/back.gif', '../templates/back.gif')
+        #page_data = page_data.replace('/style/stories.css', '../templates/stories (for local use only).css')
+        #page_data = page_data.replace('/derby/back.gif', '../templates/back.gif')
 
         charset_info = page_data.find('<meta charset="utf-8">')
         if charset_info < 0:
@@ -961,6 +962,7 @@ try:
 
 except IOError:
     print("I/O error")
+
 
 print(
 '''Archive complete:

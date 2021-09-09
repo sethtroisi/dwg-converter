@@ -80,9 +80,9 @@ Several helper scripts exist
 #    - appending to old archive files that are not in the new format requires a trip to a pop-up editor.
 #	   In this case, you need to rearrange some markers at the beginning and end of file in very particular ways
 #		as documented in the ensure_new_format procedure. Takes some trial and error the first time!
-#    - to rerun and recreate append to archive stories, must delete the original url file else skips. Be sure to do this before done
+#    - to rerun and recreate append-to-archive stories, must delete the original url file else skips. 
 # review the output csv file to ensure that all entries are complete, in particular, the blurbs. 
-#	Blurb processing is easily defeated by the random things that authors do, can modify the soup file or edit csv
+#	Blurb processing is easily defeated by the random things that authors do so modify the soup file or edit csv
 #	If blurbs are missing, manually add one to the modified_csv and that will carry over to the output
 
 # Need to change the template file path in the html before done - either rerun (deleting and rediting append to archive files)
