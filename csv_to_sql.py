@@ -1,12 +1,25 @@
 # -*- coding: utf8 -*-
+
+# This reads story_archiver's output csv and creates the corresponding sql statements
+#   (insert for new stories and update for appended stories) to update the story_TOC.
+# It also segregates and copies the corresponding story files to two /cache subdirs and prints
+#   the associated filenames to facilitate their transfer over to dwiggie. 
+
+
 import csv
 import os.path
+#from shutil import copyfile
+import shutil
+from collections import Counter
 
 DWG_DIR = 'derby'
 INPUT_CSV_FILENAME = "data/dwg_archive_results.csv"  # output from story_archive, manually touched up
 OUTPUT_SQL_FILENAME = "data/dwg_archive_results.sql"    #output instructions to use at dwiggie_c
 input_csv_filename = ""
 output_sql_filename = ""
+story_file_dir = "cache"
+new_file_dir = story_file_dir+"/new_files"
+updated_file_dir= story_file_dir+"/updated_files"
 
 #Input CSV file should have the following columns, specified in csv_creator and passed on by story_archiver:
 header_test = ['last_update/Posting','create_date','Msg Id','author_name','title_name',
@@ -68,14 +81,17 @@ sql_schema =  """
 """
 
 # SQL statement templates:
+#TODO: unclear what to put in here for the auto increment field
 SQL_INSERT_TEMPLATE = '''
-        INSERT INTO dwg_stories VALUES ("
+        INSERT INTO dwg_stories (title_name, story_url, author_name, user_id, type, blurb,
+                                northanger, sense, pride, emma, mansfield, persuasion, juvenilia,
+                                misc, created, last_update, completed, base_url, sub_dir)
+        VALUES (
             {title_name},
-            NULL,
-            {story_url},
-            {author_name},
+            '{story_url}',
+            '{author_name}',
             {user_id},
-            {category},
+            '{category}',
             {blurb},
             {northanger},
             {sense},
@@ -87,13 +103,10 @@ SQL_INSERT_TEMPLATE = '''
             {misc},
             {created_date},
             {last_update},
-            NULL,
             {completed},
-            NULL,
-            {base_url},
-            {sub_dir},
-            0
-        ");'''
+            '{base_url}',
+            '{sub_dir}'
+        );'''
 
 SQL_UPDATE_TEMPLATE = '''
         UPDATE dwg_stories
@@ -108,11 +121,11 @@ SQL_UPDATE_TEMPLATE = '''
             juvenilia = {juvenilia},
             misc = {misc},
             last_update = {last_update},
-            completed = {completed},
-        WHERE title_name == {title_name} AND author_name == {author_name};
+            completed = {completed}
+        WHERE title_name == {title_name} AND author_name == '{author_name}';
         '''
         
-#TODO: explain this operation:
+#TODO: explain why need this operation:
 def bad_sql_escape(text):
     return "'" + text.strip().replace("'", "''") + "'"
 
@@ -120,15 +133,14 @@ def generate_sql_statement(action, line):
 
     # This is how sql escapes things
     blurb = bad_sql_escape(line[blurb_index])
-    # New stories are not multipart
-    #TODO - can I do a straightreplacement of sub_dir or is it a keyword?
-    sub_dir = dwq_archive_dir
-
-    #TODO: not tracking numChapters?
+    title = bad_sql_escape(line[title_index])
+    
+    # Note, new stories are not multipart
 
     #TODO: verify the various url fields, what does this line do and what is the field?
     if action == "ArchiveNew":
         base_url = os.path.splitext(os.path.basename(line[new_filename_index]))[0]
+        story_url = '/' + DWG_DIR + '/'+ dwq_archive_dir + '/' + line[new_filename_index]
 
         '''
         #TODO: in this old code, what is the f? and how is this substitution supposed to work?
@@ -140,22 +152,22 @@ def generate_sql_statement(action, line):
             {genre_bools}, {line[1]!r}, {line[0]!r}, NULL, {completed}, {genera}, {base_url!r}, {sub_dir!r}, {multipart}
         );"""
         '''
-        #TODO by not specifying the column names, we are assuming the correct order, safe?...
+        #TODO: wanted to use DEFAULT rather than NULL but sqlite didn't accept, does dwg?
         sql_statement = SQL_INSERT_TEMPLATE.format(
-            title_name = line[title_index],
-            story_url = '/DWG_DIR/dwq_archive_dir/'+line[new_filename_index],
+            title_name = title,
+            story_url = story_url,
             author_name = line[author_index],
-            user_id = line[author_id_index],
+            user_id = line[author_id_index] if line[author_id_index]  else "NULL",
             category = line[category_index],
             blurb = blurb,
-            northanger = line[northanger_index],
-            sense = line[sense_index],
-            pride = line[pride_index],
-            emma = line[emma_index],
-            mansfield = line[mansfield_index],
-            persuasion = line[persuasion_index],
-            juvenilia = line[juvenilia_index],
-            misc = line[misc_index],
+            northanger = line[northanger_index] if line[northanger_index] else "NULL",
+            sense = line[sense_index] if line[sense_index] else "NULL",
+            pride = line[pride_index] if line[pride_index] else "NULL",
+            emma = line[emma_index] if line[emma_index] else "NULL",
+            mansfield = line[mansfield_index] if line[mansfield_index] else "NULL",
+            persuasion = line[persuasion_index] if line[persuasion_index] else "NULL",
+            juvenilia = line[juvenilia_index] if line[juvenilia_index] else "NULL",
+            misc = line[misc_index] if line[misc_index] else "NULL",
             created_date = line[creation_date_index],
             last_update = line[post_date_index],
             completed = line[final_post_index],
@@ -170,17 +182,17 @@ def generate_sql_statement(action, line):
         #TODO: does category column have a name? cause in theory, could change it
             #?? = line[category_index]!r},
         sql_statement = SQL_UPDATE_TEMPLATE.format(
-            title_name = line[title_index],
+            title_name = title,
             author_name = line[author_index],
             blurb = blurb,
-            northanger = line[northanger_index],
-            sense = line[sense_index],
-            pride = line[pride_index],
-            emma = line[emma_index],
-            mansfield = line[mansfield_index],
-            persuasion = line[persuasion_index],
-            juvenilia = line[juvenilia_index],
-            misc = line[misc_index],
+            northanger = line[northanger_index] if line[northanger_index] else "NULL",
+            sense = line[sense_index] if line[sense_index] else "NULL",
+            pride = line[pride_index] if line[pride_index] else "NULL",
+            emma = line[emma_index] if line[emma_index] else "NULL",
+            mansfield = line[mansfield_index] if line[mansfield_index] else "NULL",
+            persuasion = line[persuasion_index] if line[persuasion_index] else "NULL",
+            juvenilia = line[juvenilia_index] if line[juvenilia_index] else "NULL",
+            misc = line[misc_index] if line[misc_index] else "NULL",
             last_update = line[post_date_index],
             completed = line[final_post_index])
         
@@ -202,9 +214,11 @@ dwq_archive_dir = ""
 while not dwq_archive_dir:
     dwq_archive_dir = input("name of archive subdir at dwiggie_c: ")
 
-new_filelist = ['Files to write to /'+dwq_archive_dir+' :']
-archive_filelist = ['Files to overwrite: ']
+new_filelist = ['Files in ' + new_file_dir  + ' to write to /derby' + dwq_archive_dir+':']
+archive_filelist = ['Files in ' + updated_file_dir + ' to overwrite at dwiggie:']
 
+os.makedirs(new_file_dir + '/',exist_ok=True)
+os.makedirs(updated_file_dir + '/',exist_ok=True)
 
 with open(input_csv_filename) as csv_file:
     reader = csv.reader(csv_file)
@@ -215,7 +229,6 @@ header = lines.pop(0)
 
 assert header == header_test, header
 
-from collections import Counter
 c = Counter()
 with open(output_sql_filename, "w") as sql_file:
     for line in lines:
@@ -225,20 +238,29 @@ with open(output_sql_filename, "w") as sql_file:
         sql_statement = generate_sql_statement(action, line)
         #print (sql_statement)
 
+        source_file = story_file_dir+"/"+line[new_filename_index]
+
         if action == "ArchiveNew":
+            target_file = new_file_dir+'/'+line[new_filename_index]
+            shutil.copyfile(source_file, target_file)
+            #new_url = 'https://www.dwiggie.com/derby/'+dwq_archive_dir+'/'+line[new_filename_index]
             new_filelist.append(line[new_filename_index])
 
         elif action == "AppendArchive":
+            target_file = updated_file_dir+'/'+line[new_filename_index]
+            shutil.copyfile(source_file, target_file)
+            # Need to keep matched pairs of file to destination for this set:
+            archive_filelist.append(target_file)
             archive_filelist.append(line[archive_url_index])
 
         else:
             print("Unexpected action", action, line)
             continue
 
-    sql_file.write(sql_statement + "\n")
+        sql_file.write(sql_statement + "\n")
 
 #TODO should we write these to a file?
-print('ensure that these files get written to dwiggie_c: \n')
+print('ensure that these files get written to dwiggie.com: \n')
 print(new_filelist)
 print()
 print(archive_filelist)
