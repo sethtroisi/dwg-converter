@@ -87,8 +87,19 @@ Several helper scripts exist
 
 # Need to change the template file path in the html before done - either rerun (deleting and rediting append to archive files)
 #	or run some magic linux cmd. 
-# Review the output files to ensure that they look correct:
+# Review the generated story files to ensure that they look correct:
 #	For stories with many updates, might want to manually prune most of the jump links
+# Review the output csv file and ensure that all the entries are complete. Can edit this rather than rerunning. Just don't subsequently overwrite!
+# Review the csv.tbd file and act as necessary on any items in there
+
+# Run csv_to_sql to generate the necessary sql statements to apply agst the TOC db and segregate the files to xfer. 
+#TBD instructions to write the story files out to dwiggie_c?
+#TBD  the new story files go to /2019 or new dir each time? 
+#   the appended story files back to their original locations as specified in the csv
+#TBD do we need to worry about file permissions or other attributes?
+# TBD: how do the sql statements get applied?
+
+# execute any other instructions from the story_archiver output e.g. deleting stories or posts
 
 
 #Review/update this - still relevant? or was this an attempt to merge multi page stories??:
