@@ -1,16 +1,18 @@
 *.csv
 *.csv.tbd
 *.json
+*.db
 
-# virtual environment files
-venv/
 backup/
 cache/
+
+venv/
 .idea/
 
 dwg-final/
 stories/
 stories_raw/
 story_backup/
+final/
 
 __pycache__/
