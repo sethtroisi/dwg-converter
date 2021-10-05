@@ -81,7 +81,6 @@ sql_schema =  """
 """
 
 # SQL statement templates:
-#TODO: unclear what to put in here for the auto increment field
 SQL_INSERT_TEMPLATE = '''
         INSERT INTO dwg_stories (title_name, story_url, author_name, user_id, type, blurb,
                                 northanger, sense, pride, emma, mansfield, persuasion, juvenilia,
@@ -101,8 +100,8 @@ SQL_INSERT_TEMPLATE = '''
             {persuasion},
             {juvenilia},
             {misc},
-            {created_date},
-            {last_update},
+            '{created_date}',
+            '{last_update}',
             {completed},
             '{base_url}',
             '{sub_dir}'
@@ -120,12 +119,11 @@ SQL_UPDATE_TEMPLATE = '''
             persuasion = {persuasion},
             juvenilia = {juvenilia},
             misc = {misc},
-            last_update = {last_update},
+            last_update = '{last_update}',
             completed = {completed}
-        WHERE title_name == {title_name} AND author_name == '{author_name}';
+        WHERE title_name = {title_name} AND author_name = '{author_name}';
         '''
         
-#TODO: explain why need this operation:
 def bad_sql_escape(text):
     return "'" + text.strip().replace("'", "''") + "'"
 
@@ -137,21 +135,10 @@ def generate_sql_statement(action, line):
     
     # Note, new stories are not multipart
 
-    #TODO: verify the various url fields, what does this line do and what is the field?
     if action == "ArchiveNew":
         base_url = os.path.splitext(os.path.basename(line[new_filename_index]))[0]
         story_url = '/' + DWG_DIR + '/'+ dwq_archive_dir + '/' + line[new_filename_index]
-
-        '''
-        #TODO: in this old code, what is the f? and how is this substitution supposed to work?
-            is it some sort of implicit template??  It didn't seem to work for me...
-        insert_sql = f"""
-        INSERT INTO dwg_stories VALUES (
-            {line[5]!r}, NULL, '/derby/2019/{line[16]}', {line[4]!r}, {line[3]}, {gen_type!r},
-            {blurb},
-            {genre_bools}, {line[1]!r}, {line[0]!r}, NULL, {completed}, {genera}, {base_url!r}, {sub_dir!r}, {multipart}
-        );"""
-        '''
+   
         #TODO: wanted to use DEFAULT rather than NULL but sqlite didn't accept, does dwg?
         sql_statement = SQL_INSERT_TEMPLATE.format(
             title_name = title,
@@ -175,15 +162,14 @@ def generate_sql_statement(action, line):
             sub_dir = dwq_archive_dir)
   
     elif action == "AppendArchive":
-        # be very careful with this statement! WHERE must be precise so as to not overwrite all the entries!
-        # We only specify the few columns that can change
-        #   by definition, title_name, author_name don't change
-        #   story_url can't change: 
-        #TODO: does category column have a name? cause in theory, could change it
-            #?? = line[category_index]!r},
+        # be very careful with this statement! WHERE must be precise so as to not overwrite multiple entries!
+        # We're safe overwriting all the fields because we just fetched the values from the db.
+        # We only specify the few columns that CAN change
+        #   by definition, title_name, author_name DON'T change and story_url CAN'T change: 
         sql_statement = SQL_UPDATE_TEMPLATE.format(
             title_name = title,
             author_name = line[author_index],
+            type = line[category_index],
             blurb = blurb,
             northanger = line[northanger_index] if line[northanger_index] else "NULL",
             sense = line[sense_index] if line[sense_index] else "NULL",

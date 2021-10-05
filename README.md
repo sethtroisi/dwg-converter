@@ -93,13 +93,52 @@ Several helper scripts exist
 # Review the csv.tbd file and act as necessary on any items in there
 
 # Run csv_to_sql to generate the necessary sql statements to apply agst the TOC db and segregate the files to xfer. 
-#TBD instructions to write the story files out to dwiggie_c?
+
+instructions to write the story files out to dwiggie_c:
+	ssh dwiggiec@dwiggie.com  [pswd in doc]
+	cd public_html/derby/
+	find . -iname <filename>  and see if there are multiple copies of whatever you're writing out
+	For stories that are being updated: 	
+	    - check existence on specirid path
+	    - cp --archive  < old versions> to /btroisi/<date>
+	    - move appended files to dwiggie from home linux terminal window:  scp /home/five/Projects/dwg/data/2021_09/append_files.zip dwiggiec@dwiggie.com:~/public_html/btroisi
+	    - unzip <filename>
+	    - seth then did a ls to see if the sizes actually got bigger.
+	    - from the temp locatio nof the new files: mv <file list> <relative pathname>
+	    - do a ls to verify that the dates on the files are actually the new ones. 
+	    (doesn't complain that it is being overwritten)
+	For new stories: 
+		- push zip to dwiggie
+		- unzip and toss zipped version
+		- move the new files to /derby/2019: mv <path/*.html> to </derby/2019
+
+FOR TOC entries: 
+	- try applying the new sql to local copy of db (create a correct copy now) to verify the sql
+	- scp the sql file to dwiggie
+	- using mysql interface, create a temp table, copied current table into new one: 
+	   mysql> CREATE TABLE temp_dwg_stories_20210913 SELECT * FROM dwg_stories;
+	   mysql> source /home/dwiggiec/btroisi/dwg_archive_results.sql
+
+TBD:	- also need to add new authors to barontage table. and dwiggie_authors table. 
+	
+	
 #TBD  the new story files go to /2019 or new dir each time? 
 #   the appended story files back to their original locations as specified in the csv
 #TBD do we need to worry about file permissions or other attributes?
 # TBD: how do the sql statements get applied?
 
 # execute any other instructions from the story_archiver output e.g. deleting stories or posts
+
+#TODO  public_html/margaret  contains some scripts and stuff
+
+#TODO  type 'history' and you can see all the commands that have been done in past. 
+
+TODO: To "delete a file": check whether any reference in TOC,  or other "active" files. 
+compress the directory into a backup file and save it somewhere with useful name. 
+Renmae directory to _remove_<old name>  and delete months later. 
+
+Notes: everything under public_html seems to be reachable by url so don't put anything "private" there. 
+
 
 
 #Review/update this - still relevant? or was this an attempt to merge multi page stories??:
