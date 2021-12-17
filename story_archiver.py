@@ -11,12 +11,14 @@ import time
 import tempfile
 from collections import Counter
 from bs4 import BeautifulSoup
+#import pdb
 
 from story_fixer import fix_one_file
 
 #-----------------------
 
-# TODO: toggle these two off for production run
+# TODO: toggle these off for production run
+PRE_PRODUCTION = False
 ONLY_A_FEW = False
 MOVING_FAST_BREAKING_THINGS = False
     #do we need to run one complete run with this to True in to format any historical files for appendarchive?
@@ -35,7 +37,8 @@ output_csv_filename = ""
 
 #----------------
 #This section of info must jibe with that in the csv_creator program:
-    
+
+#TODO:
 PREVIOUS_ARCHIVE_DATE = datetime.datetime(2019,7,1)	# will ignore any messages older than this as they've already been processed
 CURRENT_ARCHIVE_DATE = datetime.datetime(2021, 9,7)    
 	# this is the final date included in this archive, becomes next "PREVIOUS_ARCHIVE_DATE"
@@ -188,7 +191,7 @@ def strip_comment(post, post_name):
         else:
             assert False, ("Didn't find DNA to remove", post_name, dna)
 
-    return post, " | ".join(purged)
+    return post.strip(), " | ".join(purged)
 
 
 def find_keyword_string (post, keyword, caseless = False):
@@ -250,10 +253,12 @@ def format_new_post(title, author, post_date, post, is_final):
         .replace("$JUMP_SECTION", JUMP_TEMPLATE.format(jump_link=jump_link_string))
         .replace("$POST_BODY_SECTION", story_data)
         .replace("$CLOSING_SECTION", closing_section)
-        #TODO: comment out these lines for production run, and in append archive below
-        # note that the stories.css contains it's own pointer which doesn't work hence the modified copy
-        #.replace('/style/stories.css', '../templates/stories (for local use only).css')
-        #.replace('/derby/back.gif', '../templates/back.gif')
+        #TODO:Figure out how to make this conditional inside the template. possible?
+                 #comment out these lines for production run, and in append archive below
+        #if PRE_PRODUCTION:
+            # note that the stories.css contains it's own pointer which doesn't work hence the modified copy
+        #    .replace('/style/stories.css', '../templates/stories (for local use only).css')
+        #    .replace('/derby/back.gif', '../templates/back.gif')  
         #NOTE Seth had put this backlink in to jump to the original post but Margaret and I don't like that
         #.replace("$OGLINK", '<a href="{}.html">originalpost</a><br/>'.format(msg_id))
         .replace("$COPYRIGHT_YEAR", post_date[:4]))
@@ -332,6 +337,7 @@ def get_post_msg_body(csv_line):
     #look for blurb before it might get stripped with comments
     blurb = get_blurb(page_data)
 
+    # assure that all dna's come out of story_fixer in lc.
     assert '<DNA>' not in page_data, "assumed incorrectly, convert these to lowercase"
 
     # Phorum post files are pre-processed by story-fixer.py
@@ -856,9 +862,10 @@ for i, csv_line in enumerate(csv_input):
         page_data = get_file(insertion_filename, False, archive_url)
         page_data = ensure_new_story_format(insertion_filename, page_data)
 
-        #TODO: this is temp code to make styles look correct in local work, remove before done:
-        #page_data = page_data.replace('/style/stories.css', '../templates/stories (for local use only).css')
-        #page_data = page_data.replace('/derby/back.gif', '../templates/back.gif')
+
+        if PRE_PRODUCTION:
+            page_data = page_data.replace('/style/stories.css', '../templates/stories (for local use only).css')
+            page_data = page_data.replace('/derby/back.gif', '../templates/back.gif')
 
         charset_info = page_data.find('<meta charset="utf-8">')
         if charset_info < 0:

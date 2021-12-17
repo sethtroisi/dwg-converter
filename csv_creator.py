@@ -15,8 +15,8 @@ ONLY_A_FEW = False
 
 ########## MAIN ##############
 
-PREVIOUS_ARCHIVE_DATE = datetime.datetime(2019,7,1)	# will ignore any messages older than this as they've already been processed
-CURRENT_ARCHIVE_DATE = datetime.datetime(2021, 8,23)    
+PREVIOUS_ARCHIVE_DATE = datetime.datetime(2021,9,7)	# will ignore any messages older than this as they've already been processed
+CURRENT_ARCHIVE_DATE = datetime.datetime(2021, 11,16)    
 	# this is the final date included in this archive, becomes next "PREVIOUS_ARCHIVE_DATE"
 comparison_date = int(PREVIOUS_ARCHIVE_DATE.timestamp())     #should be a unixtime but apparently a float so force it to int
 
@@ -95,9 +95,7 @@ with open(input_posts_json_filename) as json_file:
                            and (entry["parent_id"] == TOP_LEVEL_MSG) 
                            and (int(entry["datestamp"]) >= comparison_date)):
                         #TODO remove the following conditional test after 8/2021 archive, it temporarily
-                        #gives pass to all ANI items because haven't been many haven't been processed    
-                        if not ((entry["forum_id"] == ANI_MSG_FORUM_ID) and (entry["parent_id"] == TOP_LEVEL_MSG)):  
-                            continue
+                         continue
 
                     if entry["forum_id"] == MSG_BOARD_FORUM_ID:
                          output_index.append([ \

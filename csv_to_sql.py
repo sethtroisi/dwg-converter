@@ -192,7 +192,7 @@ def generate_sql_statement(action, line):
 input_csv_filename = input("Specify manually edited CSV action file (default:{}):  ".format(INPUT_CSV_FILENAME))
 if input_csv_filename == "":
     input_csv_filename = INPUT_CSV_FILENAME
-output_sql_filename = input("Specify Output CSV file (default:{}):  ".format(OUTPUT_SQL_FILENAME))
+output_sql_filename = input("Specify Output SQL file (default:{}):  ".format(OUTPUT_SQL_FILENAME))
 if output_sql_filename == "":
     output_sql_filename = OUTPUT_SQL_FILENAME
 
